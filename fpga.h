@@ -1,7 +1,29 @@
+#include <assert.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <cstdlib>
+#include <vector>
+#include <chrono>
+#include <thread>
+#include <mutex>
+#include <unordered_map>
+
 #include <fpga_pci.h>
 #include <fpga_mgmt.h>
 #include <utils/lcd.h>
 #include <utils/sh_dpi_tasks.h>
+
+const bool file_io = true;
+const bool send_data = true;
+const bool metrics = true;
+const bool tracing = false;
+const bool pcim = true;
+const uint64_t max_apps = 4;
 
 class FPGA
 {
@@ -9,8 +31,11 @@ class FPGA
     int app_id;
 
 public:
-    FPGA(int app_id) : app_id(app_id)
+    FPGA(int slot, int app_id) : app_id(app_id)
     {
+	int rc, fd;
+	char xdma_str[19];
+
         // Init FPGA library
         rc = fpga_mgmt_init();
         fail_on(rc, out, "Unable to initialize the fpga_mgmt library\n");
@@ -47,24 +72,26 @@ public:
             }
         }
         printf("xfer_buf phys base: 0x%lX\n", phys_buf);
+out:
+	return;
     }
 
-    int read_app_reg(uint64_t addr, uint64_t &value)
+    int read_app_reg(uint64_t addr, int app_id, uint64_t &value)
     {
         return reg_access(app_bar_handle, app_id, addr, value, false, true);
     }
 
-    int write_app_reg(uint64_t addr, uint64_t value)
+    int write_app_reg(uint64_t addr, int app_id, uint64_t value)
     {
         return reg_access(app_bar_handle, app_id, addr, value, true, true);
     }
 
-    int read_sys_reg(uint64_t addr, uint64_t &value)
+    int read_sys_reg(uint64_t addr, int app_id, uint64_t &value)
     {
         return reg_access(sys_bar_handle, app_id, addr, value, false, true);
     }
 
-    int write_sys_reg(uint64_t addr, uint64_t value)
+    int write_sys_reg(uint64_t addr, int app_id, uint64_t value)
     {
         return reg_access(sys_bar_handle, app_id, addr, value, true, true);
     }
@@ -165,7 +192,7 @@ public:
             {
                 if (from_device)
                 {
-                    if (dma_read(app_id, xfer_buf, ppn << 12, num_pages << 12))
+                    if (dma_read(xfer_buf, ppn << 12, num_pages << 12))
                     {
                         printf("Transfer metadata: app %lu, buf %p, ppn %lu, pages %lu\n",
                                app_id, xfer_buf, ppn, num_pages);
@@ -174,7 +201,7 @@ public:
                 }
                 else
                 {
-                    if (dma_write(app_id, xfer_buf, ppn << 12, num_pages << 12))
+                    if (dma_write(xfer_buf, ppn << 12, num_pages << 12))
                     {
                         printf("Transfer metadata: app %lu, buf %p, ppn %lu, pages %lu\n",
                                app_id, xfer_buf, ppn, num_pages);
