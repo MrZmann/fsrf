@@ -16,5 +16,5 @@ LDLIBS = -lfpga_mgmt -lrt -lpthread
 SRC = ${SDK_DIR}/userspace/utils/sh_dpi_tasks.c
 
 test:
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) reg_test.cpp -o reg_test
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp reg_test.cpp -o reg_test
 

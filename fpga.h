@@ -31,13 +31,13 @@ class FPGA
     int app_id;
 
 public:
-    FPGA(int slot, int app_id) {}
+    FPGA(int slot, int app_id);
 
-    int read_app_reg(uint64_t addr, int app_id, uint64_t &value);
-    int write_app_reg(uint64_t addr, int app_id, uint64_t value);
+    int read_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value);
+    int write_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value);
 
-    int read_sys_reg(uint64_t addr, int app_id, uint64_t &value);
-    int write_sys_reg(uint64_t addr, int app_id, uint64_t value);
+    int read_sys_reg(uint64_t app_id, uint64_t addr, uint64_t &value);
+    int write_sys_reg(uint64_t app_id, uint64_t addr, uint64_t &value);
 
     int read_mem_reg(uint64_t addr, uint64_t &value);
     int write_mem_reg(uint64_t addr, uint64_t value);
@@ -68,6 +68,6 @@ private:
     int dth_fd[4];
     int htd_fd[4];
 
-    int reg_access(pci_bar_handle_t &bar_handle, uint64_t addr,
+    int reg_access(pci_bar_handle_t &bar_handle, uint64_t app_id, uint64_t addr,
                    uint64_t &value, bool write, bool mask);
 };

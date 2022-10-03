@@ -3,6 +3,7 @@
 FPGA::FPGA(int slot, int app_id) : app_id(app_id)
 {
     int rc, fd;
+    int xfer_buf_size = 2 << 20;
     char xdma_str[19];
 
     // Init FPGA library
@@ -16,14 +17,16 @@ FPGA::FPGA(int slot, int app_id) : app_id(app_id)
     fail_on(rc, out, "Unable to attach PCIe BAR(s)\n");
 
     read_sys_reg(9, app_id * 8, pages_xfered);
-    xfer_buf = ::mmap(NULL, 2 << 20, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+
+
+    xfer_buf = ::mmap(NULL, xfer_buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
     if (xfer_buf == MAP_FAILED)
     {
         perror("xfer_buf allocation error");
         printf("errno: %d\n", errno);
         exit(EXIT_FAILURE);
     }
-    if (mlock(xfer_buf, 2 << 20))
+    if (mlock(xfer_buf, xfer_buf_size))
     {
         perror("mlock error");
     }
@@ -45,22 +48,22 @@ out:
     return;
 }
 
-int FPGA::read_app_reg(uint64_t addr, int app_id, uint64_t &value)
+int FPGA::read_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
 {
     return reg_access(app_bar_handle, app_id, addr, value, false, true);
 }
 
-int FPGA::write_app_reg(uint64_t addr, int app_id, uint64_t value)
+int FPGA::write_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
 {
     return reg_access(app_bar_handle, app_id, addr, value, true, true);
 }
 
-int FPGA::read_sys_reg(uint64_t addr, int app_id, uint64_t &value)
+int FPGA::read_sys_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
 {
     return reg_access(sys_bar_handle, app_id, addr, value, false, true);
 }
 
-int FPGA::write_sys_reg(uint64_t addr, int app_id, uint64_t value)
+int FPGA::write_sys_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
 {
     return reg_access(sys_bar_handle, app_id, addr, value, true, true);
 }
@@ -108,7 +111,7 @@ int FPGA::dma_read(void *buf, uint64_t addr, uint64_t bytes)
     return 0;
 }
 
-int dma_write(void *buf, uint64_t addr, uint64_t bytes)
+int FPGA::dma_write(void *buf, uint64_t addr, uint64_t bytes)
 {
     assert(pcis);
 
@@ -176,7 +179,7 @@ void FPGA::dma_wrapper(bool from_device, uint64_t num_pages, uint64_t ppn, int a
     }
 }
 
-int FPGA::reg_access(pci_bar_handle_t &bar_handle, uint64_t addr,
+int FPGA::reg_access(pci_bar_handle_t &bar_handle, uint64_t app_id, uint64_t addr,
                      uint64_t &value, bool write, bool mask)
 {
     int rc;
