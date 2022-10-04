@@ -28,7 +28,7 @@ const uint64_t max_apps = 4;
 class FPGA
 {
     const bool pcis = false;
-    int app_id;
+    uint64_t app_id;
 
 public:
     FPGA(int slot, int app_id);
@@ -52,7 +52,7 @@ public:
     uint64_t phys_buf;
     uint64_t pages_xfered;
 
-    void dma_wrapper(bool from_device, uint64_t num_pages, uint64_t ppn, int app_id);
+    void dma_wrapper(bool from_device, uint64_t num_pages, uint64_t ppn, uint64_t app_id);
 
 private:
     // PCIe IDs

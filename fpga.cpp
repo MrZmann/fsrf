@@ -1,10 +1,12 @@
+#include <cstring>
 #include "fpga.h"
+
 
 FPGA::FPGA(int slot, int app_id) : app_id(app_id)
 {
     int rc, fd;
     int xfer_buf_size = 2 << 20;
-    char xdma_str[19];
+    // char xdma_str[19];
 
     // Init FPGA library
     rc = fpga_mgmt_init();
@@ -106,8 +108,10 @@ int FPGA::dma_read(void *buf, uint64_t addr, uint64_t bytes)
     assert(addr % 0x1000 == 0);
     assert(bytes % 0x1000 == 0);
     uint64_t num_pages = bytes / 0x1000;
-    dma_wrapper(false, num_pages, addr / 0x1000, app_id);
+    assert(num_pages == 4);
+    dma_wrapper(true, num_pages, addr / 0x1000, app_id);
     std::memcpy(buf, xfer_buf, bytes);
+    std::memset(xfer_buf, 0, bytes);
     return 0;
 }
 
@@ -116,12 +120,14 @@ int FPGA::dma_write(void *buf, uint64_t addr, uint64_t bytes)
     assert(addr % 0x1000 == 0);
     assert(bytes % 0x1000 == 0);
     uint64_t num_pages = bytes / 0x1000;
+    assert(num_pages == 4);
     std::memcpy(xfer_buf, buf, bytes);
-    dma_wrapper(true, num_pages, addr / 0x1000, app_id);
+    dma_wrapper(false, num_pages, addr / 0x1000, app_id);
+    std::memset(xfer_buf, 0, bytes);
     return 0;
 }
 
-void FPGA::dma_wrapper(bool from_device, uint64_t num_pages, uint64_t ppn, int app_id)
+void FPGA::dma_wrapper(bool from_device, uint64_t num_pages, uint64_t ppn, uint64_t app_id)
 {
     assert(num_pages <= 512);
 
