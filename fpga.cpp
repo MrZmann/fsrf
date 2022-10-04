@@ -103,27 +103,21 @@ uint64_t FPGA::virt_to_phys(uint64_t virt_addr)
 
 int FPGA::dma_read(void *buf, uint64_t addr, uint64_t bytes)
 {
-    assert(pcis);
-
-    uint64_t nbytes = pread(dth_fd[app_id], buf, bytes, addr);
-    if (nbytes != bytes)
-    {
-        printf("XDMA read failed with error \"%s\"\n", strerror(errno));
-        return 1;
-    }
+    assert(addr % 0x1000 == 0);
+    assert(bytes % 0x1000 == 0);
+    uint64_t num_pages = bytes / 0x1000;
+    dma_wrapper(false, num_pages, addr / 0x1000, app_id);
+    std::memcpy(buf, xfer_buf, bytes);
     return 0;
 }
 
 int FPGA::dma_write(void *buf, uint64_t addr, uint64_t bytes)
 {
-    assert(pcis);
-
-    uint64_t nbytes = pwrite(htd_fd[app_id], buf, bytes, addr);
-    if (nbytes != bytes)
-    {
-        printf("XDMA write failed with error \"%s\"\n", strerror(errno));
-        return 1;
-    }
+    assert(addr % 0x1000 == 0);
+    assert(bytes % 0x1000 == 0);
+    uint64_t num_pages = bytes / 0x1000;
+    std::memcpy(xfer_buf, buf, bytes);
+    dma_wrapper(true, num_pages, addr / 0x1000, app_id);
     return 0;
 }
 
