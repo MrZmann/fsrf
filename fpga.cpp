@@ -18,6 +18,9 @@ FPGA::FPGA(int slot, int app_id) : app_id(app_id)
 
     read_sys_reg(9, app_id * 8, pages_xfered);
 
+    fd = open("/proc/sys/vm/nr_hugepages", O_WRONLY);
+    pwrite(fd, "4\n", 3, 0);
+    close(fd);
 
     xfer_buf = ::mmap(NULL, xfer_buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
     if (xfer_buf == MAP_FAILED)
