@@ -1,17 +1,17 @@
 #include <assert.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <chrono>
+#include <cstdlib>
 #include <errno.h>
+#include <fcntl.h>
+#include <mutex>
+#include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <cstdlib>
-#include <vector>
-#include <chrono>
+#include <sys/stat.h>
 #include <thread>
-#include <mutex>
+#include <unistd.h>
 #include <unordered_map>
+#include <vector>
 
 #include <fpga_pci.h>
 #include <fpga_mgmt.h>
