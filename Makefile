@@ -2,7 +2,7 @@ HOME_DIR = /home/centos/src/project_data
 # todo: git submodule https://github.com/aws/aws-fpga
 AWS_FPGA = $(HOME_DIR)/aws-fpga
 # HDK_DIR = $(AWS_FPGA)/hdk/
-SDK_DIR = $(AWS_FPGA)/sdk/
+SDK_DIR = $(AWS_FPGA)/sdk
 
 # VPATH = src:include:$(HDK_DIR)/common/software/src:$(HDK_DIR)/common/software/include
 
@@ -16,6 +16,9 @@ LDLIBS = -lfpga_mgmt -lrt -lpthread
 
 SRC = ${SDK_DIR}/userspace/utils/sh_dpi_tasks.c
 
+app:
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) apps/my_md5.cpp -o my_md5
+
 reg:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp tests/fpga/reg_test.cpp -o reg_test
 
@@ -28,3 +31,4 @@ test:
 	@make -s dma
 	@sudo ./reg_test > /dev/null
 	@sudo ./dma_test > /dev/null
+	@rm -f reg dma
