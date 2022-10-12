@@ -2,7 +2,7 @@
 #include "fpga.h"
 
 
-FPGA::FPGA(int slot, int app_id) : app_id(app_id)
+FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
 {
     int rc, fd;
     int xfer_buf_size = 2 << 20;
@@ -58,7 +58,7 @@ int FPGA::read_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
     return reg_access(app_bar_handle, app_id, addr, value, false, true);
 }
 
-int FPGA::write_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
+int FPGA::write_app_reg(uint64_t app_id, uint64_t addr, uint64_t value)
 {
     return reg_access(app_bar_handle, app_id, addr, value, true, true);
 }
@@ -68,7 +68,7 @@ int FPGA::read_sys_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
     return reg_access(sys_bar_handle, app_id, addr, value, false, true);
 }
 
-int FPGA::write_sys_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
+int FPGA::write_sys_reg(uint64_t app_id, uint64_t addr, uint64_t value)
 {
     return reg_access(sys_bar_handle, app_id, addr, value, true, true);
 }
@@ -120,7 +120,6 @@ int FPGA::dma_write(void *buf, uint64_t addr, uint64_t bytes)
     assert(addr % 0x1000 == 0);
     assert(bytes % 0x1000 == 0);
     uint64_t num_pages = bytes / 0x1000;
-    assert(num_pages == 4);
     std::memcpy(xfer_buf, buf, bytes);
     dma_wrapper(false, num_pages, addr / 0x1000, app_id);
     std::memset(xfer_buf, 0, bytes);

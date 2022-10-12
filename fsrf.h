@@ -1,4 +1,7 @@
+#pragma once
+
 #include <set>
+#include <signal.h>
 #include <stdint.h>
 #include <thread>
 #include <unordered_map>
@@ -10,13 +13,32 @@ extern FSRF *fsrf;
 
 class FSRF
 {
-    FSRF(uint64_t app_id) : use_dram_tlb(true), fpga(0, app_id), app_id(app_id)
+public:
+    FSRF(uint64_t app_id) : fpga(0, app_id), app_id(app_id)
+    // FSRF(uint64_t app_id) : fpga(0, app_id)
+    //FSRF(uint64_t app_id) : fpga(), app_id(app_id)
     {
         // Global instance for the SIGSEGV handler to use
         fsrf = this;
-        faultHandlerThread = std::thread(&FSRF::fault_listener, this);
+        faultHandlerThread = std::thread(&FSRF::device_fault_listener, this);
+
+        // enable tlb
+        fpga.write_sys_reg(app_id, 0x10, 1);
+
+        // use dram tlb
+        fpga.write_sys_reg(app_id, 0x18, 0);
+
+        // AOS emulation select?
+        fpga.write_sys_reg(app_id, 0x20, 0x1);
+
+        // Coyote striping
+        fpga.write_sys_reg(app_id + 4, 0x10, 0x0);
+
+        // PCIe coyote striping
+        fpga.write_sys_reg(8, 0x18, 0x0);
+
         struct sigaction act = {0};
-        act.sa_sigaction = FSRF::host_fault_handler;
+        act.sa_sigaction = FSRF::handle_host_fault;
         act.sa_flags = SA_SIGINFO;
         sigaction(SIGSEGV, &act, NULL);
 
@@ -35,9 +57,6 @@ private:
     uint64_t phys_base;  // lowest paddr for app_id
     uint64_t phys_bound; // highest paddr for app_id
 
-    // device configuration
-    bool use_dram_tlb;
-
     // device
     FPGA fpga;
 
@@ -46,7 +65,9 @@ private:
     uint64_t app_id;
 
     // uint64_t host_vpn_to_ppn(uint64_t ppn);
+    void respond_tlb(uint64_t ppn, uint64_t valid);
     uint64_t allocate_device_ppn();
+    void free_device_vpn(uint64_t vpn);
     uint64_t read_tlb_fault();
     uint64_t dram_tlb_addr(uint64_t vpn);
     void write_tlb(uint64_t vpn,
@@ -61,9 +82,9 @@ private:
     void dmaWrite();
     void dmaRead();
 
-    bool FSRF::should_handle_fault(uint64_t fault);
-    void FSRF::handle_fault(bool read, uint64_t vpn);
-    void fault_listener();
+    bool should_handle_fault(uint64_t fault);
+    void handle_device_fault(bool read, uint64_t vpn);
+    void device_fault_listener();
 
-    static void host_fault_handler(int sig, siginfo_t *info, void *ucontext);
+    static void handle_host_fault(int sig, siginfo_t *info, void *ucontext);
 };

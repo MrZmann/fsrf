@@ -1,3 +1,5 @@
+#pragma once 
+
 #include <assert.h>
 #include <chrono>
 #include <cstdlib>
@@ -31,13 +33,13 @@ class FPGA
     uint64_t app_id;
 
 public:
-    FPGA(int slot, int app_id);
+    FPGA(uint64_t slot, uint64_t app_id);
 
     int read_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value);
-    int write_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value);
+    int write_app_reg(uint64_t app_id, uint64_t addr, uint64_t value);
 
     int read_sys_reg(uint64_t app_id, uint64_t addr, uint64_t &value);
-    int write_sys_reg(uint64_t app_id, uint64_t addr, uint64_t &value);
+    int write_sys_reg(uint64_t app_id, uint64_t addr, uint64_t value);
 
     int read_mem_reg(uint64_t addr, uint64_t &value);
     int write_mem_reg(uint64_t addr, uint64_t value);
