@@ -151,15 +151,20 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     std::cout << "Handling device fault at: " << (uint64_t*) vaddr << '\n';
 
     // PROT_NONE allows only fpga to access (fpga accessing physical memory)
-    // mprotect((void*) vaddr, bytes, PROT_NONE);
+    mprotect((void*) vaddr, bytes, PROT_READ);
 
     uint64_t device_ppn = allocate_device_ppn();
     std::cout << "Attempting dma write\n";
-    fpga.dma_write((void*) vaddr, device_ppn << 12, bytes);
+    fpga.dma_write((void*) vaddr, device_ppn << 12, bytes); // appears that the host access vaddr here.
     std::cout << "Finished dma write\n";
 
+    mprotect((void*) vaddr, bytes, PROT_NONE);
     // remember that this is on the device
     device_vpn_to_ppn[vpn] = device_ppn;
+    std::cout << "keys:\n";
+    for(auto i : device_vpn_to_ppn){
+        std::cout << "\t" << i.first << "\n";
+    }
     write_tlb(vpn, device_ppn, true, true, true, false);
     respond_tlb(device_ppn, true);
 }
@@ -190,6 +195,14 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
     uint64_t missAddress = (uint64_t)info->si_addr;
     uint64_t vpn = missAddress >> 12;
 
+    std::cerr << "Host trying to access address: " << info->si_addr << '\n';
+    std::cerr << "Host trying to access vpn: " << vpn << '\n';
+
+    std::cout << "Here are all the pages on the device (vpn):\n";
+    for(auto i : fsrf->device_vpn_to_ppn){
+        std::cout << "\t" << i.first << "\n";
+    }
+
     // if this page is on the device
     if (fsrf->device_vpn_to_ppn.find(vpn) != fsrf->device_vpn_to_ppn.end())
     {
@@ -197,13 +210,13 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 
         // invalidate on tlb
         fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, false, false, false);
+
+        mprotect((void*) vaddr, 1 << 12, PROT_READ | PROT_WRITE);
         // dma from device to host
         fsrf->fpga.dma_read((void*) vaddr, fsrf->device_vpn_to_ppn[vpn], (uint64_t) 1 << 12);
 
         // free up device page
         fsrf->free_device_vpn(vpn);
-
-        mprotect((void*) vaddr, 1 << 12, PROT_READ | PROT_WRITE);
         return;
     }
 

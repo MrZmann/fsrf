@@ -11,8 +11,6 @@ int main(int argc, char *argv[])
     if(buf == MAP_FAILED)
         printf("Oh dear, something went wrong with mmap: \n\t%s\n", strerror(errno));
 
-    std::cout << "\nAPP: giving src_addr == " << (uint64_t*) buf << "\n\n";
-
     fsrf.cntrlreg_write(0x10, (uint64_t) buf);  // src_addr
     fsrf.cntrlreg_write(0x18, 8);               // rd_credits
     fsrf.cntrlreg_write(0x20, (1 << 12) / 64);  // num 64 byte words
@@ -25,6 +23,12 @@ int main(int argc, char *argv[])
         if(val != 0)
             std:: cout << "Val: " << val << "\n";
         count++;
+    }
+
+    for(int i = 0; i < (1 << 12) / 64; i++){
+        uint64_t v = *(uint64_t*) buf;
+        if(v != 0)
+            std::cout << "???\n";
     }
 
 	// end runs
