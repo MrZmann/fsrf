@@ -14,39 +14,7 @@ extern FSRF *fsrf;
 class FSRF
 {
 public:
-    FSRF(uint64_t app_id) : fpga(0, app_id), app_id(app_id)
-    // FSRF(uint64_t app_id) : fpga(0, app_id)
-    //FSRF(uint64_t app_id) : fpga(), app_id(app_id)
-    {
-        // Global instance for the SIGSEGV handler to use
-        fsrf = this;
-        faultHandlerThread = std::thread(&FSRF::device_fault_listener, this);
-
-        // enable tlb
-        fpga.write_sys_reg(app_id, 0x10, 1);
-
-        // use dram tlb
-        fpga.write_sys_reg(app_id, 0x18, 0);
-
-        // AOS emulation select?
-        fpga.write_sys_reg(app_id, 0x20, 0x1);
-
-        // Coyote striping
-        fpga.write_sys_reg(app_id + 4, 0x10, 0x0);
-
-        // PCIe coyote striping
-        fpga.write_sys_reg(8, 0x18, 0x0);
-
-        struct sigaction act = {0};
-        act.sa_sigaction = FSRF::handle_host_fault;
-        act.sa_flags = SA_SIGINFO;
-        sigaction(SIGSEGV, &act, NULL);
-
-        uint64_t addrs[4] = {0, 8 << 20, 4 << 20, 12 << 20};
-        phys_base = addrs[app_id];
-        phys_bound = addrs[app_id] + (16 << 20) / max_apps;
-    }
-
+    FSRF(uint64_t app_id);
     void cntrlreg_write(uint64_t addr, uint64_t value);
     uint64_t cntrlreg_read(uint64_t addr);
 
@@ -70,6 +38,8 @@ private:
     void free_device_vpn(uint64_t vpn);
     uint64_t read_tlb_fault();
     uint64_t dram_tlb_addr(uint64_t vpn);
+
+    void flush_tlb();
     void write_tlb(uint64_t vpn,
                    uint64_t ppn,
                    bool writeable,

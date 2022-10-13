@@ -6,6 +6,38 @@
 
 FSRF *fsrf;
 
+FSRF::FSRF(uint64_t app_id) : fpga(0, app_id), app_id(app_id)
+{
+    // Global instance for the SIGSEGV handler to use
+    fsrf = this;
+    faultHandlerThread = std::thread(&FSRF::device_fault_listener, this);
+
+    // enable tlb
+    fpga.write_sys_reg(app_id, 0x10, 1);
+
+    // use dram tlb
+    fpga.write_sys_reg(app_id, 0x18, 1);
+
+    // Coyote striping
+    fpga.write_sys_reg(app_id + 4, 0x10, 0x0);
+
+    // PCIe coyote striping
+    fpga.write_sys_reg(8, 0x18, 0x0);
+
+    struct sigaction act = {0};
+    act.sa_sigaction = FSRF::handle_host_fault;
+    act.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &act, NULL);
+
+    uint64_t addrs[4] = {0, 8 << 20, 4 << 20, 12 << 20};
+    phys_base = addrs[app_id];
+    phys_bound = addrs[app_id] + (16 << 20) / max_apps;
+
+    flush_tlb();
+    std::cout << "Finished flush\n";
+}
+
+
 void FSRF::cntrlreg_write(uint64_t addr, uint64_t value)
 {
     fpga.write_app_reg(app_id, addr, value);
@@ -51,7 +83,7 @@ void FSRF::free_device_vpn(uint64_t vpn)
 
 uint64_t FSRF::read_tlb_fault()
 {
-    uint64_t res;
+    uint64_t res = (uint64_t) ~0;
     fpga.read_sys_reg(app_id, 0, res);
     return res;
 }
@@ -60,6 +92,16 @@ void FSRF::respond_tlb(uint64_t ppn, uint64_t valid)
 {
     uint64_t resp = 0 | (ppn << 1) | valid;
     fpga.write_sys_reg(app_id, 0x0, resp);
+}
+
+void FSRF::flush_tlb(){
+    uint64_t low_addr = dram_tlb_addr(0);
+    uint64_t high_addr = dram_tlb_addr((uint64_t) 1 << 36);
+    uint64_t* bytes = new uint64_t[512];
+
+    for(uint64_t ppn = low_addr; ppn <= high_addr; ppn++){
+        fpga.dma_write(bytes, ppn << 12, 0x1000);
+    }
 }
 
 void FSRF::write_tlb(uint64_t vpn,
@@ -106,13 +148,15 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     uint64_t vaddr = vpn << 12;
     uint64_t bytes = 1 << 12;
 
-    std::cout << "Handling device fault at: " << vaddr << '\n';
+    std::cout << "Handling device fault at: " << (uint64_t*) vaddr << '\n';
 
     // PROT_NONE allows only fpga to access (fpga accessing physical memory)
-    mprotect((void*) vaddr, bytes, PROT_NONE);
+    // mprotect((void*) vaddr, bytes, PROT_NONE);
 
     uint64_t device_ppn = allocate_device_ppn();
+    std::cout << "Attempting dma write\n";
     fpga.dma_write((void*) vaddr, device_ppn << 12, bytes);
+    std::cout << "Finished dma write\n";
 
     // remember that this is on the device
     device_vpn_to_ppn[vpn] = device_ppn;
@@ -122,23 +166,22 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
 
 void FSRF::device_fault_listener()
 {
-    std::cout << "fault handler is listening";
-
     while (true)
     {
         uint64_t fault = read_tlb_fault();
-        if(fault != 1062849512059437056)
-            std::cout << "before fault " << fault << "\n";
+        //if(fault != 1062849512059437056 && fault != 0)
+        //    std::cout << "before fault " << fault << "\n";
         if (!(fault & 1) || fault == (uint64_t) -1)
             continue;
 
-        std::cout << "fault " << fault << "\n";
+        std::cout << "fault " << (uint64_t*) fault << "\n";
 
         bool read = fault & 0x2;
         uint64_t vpn = (fault >> 2) & 0xFFFFFFFFFFFFF;
 
         handle_device_fault(read, vpn);
     }
+    std::cerr<< "fault listener should never return!\n";
 }
 
 void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
