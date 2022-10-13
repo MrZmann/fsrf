@@ -96,10 +96,9 @@ void FSRF::respond_tlb(uint64_t ppn, uint64_t valid)
 
 void FSRF::flush_tlb(){
     uint64_t low_addr = dram_tlb_addr(0);
-    uint64_t high_addr = dram_tlb_addr((uint64_t) 1 << 36);
     uint64_t* bytes = new uint64_t[512];
 
-    for(uint64_t ppn = low_addr; ppn <= high_addr; ppn++){
+    for(uint64_t ppn = low_addr; ppn <= 32768; ppn++){
         fpga.dma_write(bytes, ppn << 12, 0x1000);
     }
 }
@@ -150,7 +149,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
 
     std::cout << "Handling device fault at: " << (uint64_t*) vaddr << '\n';
 
-    // PROT_NONE allows only fpga to access (fpga accessing physical memory)
+    // TODO: Lock so that only device or host fault handler can race
     mprotect((void*) vaddr, bytes, PROT_READ);
 
     uint64_t device_ppn = allocate_device_ppn();
@@ -158,6 +157,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     fpga.dma_write((void*) vaddr, device_ppn << 12, bytes); // appears that the host access vaddr here.
     std::cout << "Finished dma write\n";
 
+    // PROT_NONE allows only fpga to access (fpga accessing physical memory)
     mprotect((void*) vaddr, bytes, PROT_NONE);
     // remember that this is on the device
     device_vpn_to_ppn[vpn] = device_ppn;
