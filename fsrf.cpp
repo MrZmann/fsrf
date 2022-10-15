@@ -4,28 +4,22 @@
 
 #include "fsrf.h"
 
+#define DBG(x) if (debug) std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
+#define ERR(x) std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; exit(1)
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
 
-FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_READ), fpga(0, app_id), app_id(app_id)
+FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_WRITE), fpga(0, app_id), app_id(app_id)
 {
-    if (debug)
-    {
-        std::cout << "[init]: FSRF constructor called:";
-        std::cout << "\tapp id: " << app_id << "\n";
-        std::cout << "\tmode: " << mode_str[mode] << " \n";
-    }
+    DBG("app_id: " << app_id);
+    DBG("mode: " << mode_str[mode]);
 
     if (fsrf != nullptr)
     {
-        std::cerr << "[init]: Error, global fsrf object already initialized.\n";
-        exit(1);
+        ERR("Global fsrf object already initialized");
     }
 
     fsrf = this;
-    if (debug)
-        std::cout << "[init]: spinning up fault handler thread.\n";
-
     faultHandlerThread = std::thread(&FSRF::device_fault_listener, this);
 
     fpga.write_sys_reg(app_id, 0x10, 1);       // enable tlb
@@ -33,8 +27,7 @@ FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_READ), fpga(0, app_id), app_id(app_
     fpga.write_sys_reg(app_id + 4, 0x10, 0x0); // Coyote striping
     fpga.write_sys_reg(8, 0x18, 0x0);          // PCIe coyote striping
 
-    if (debug)
-        std::cout << "[init]: Registering host signal handler.\n";
+    DBG("Registering host signal handler");
 
     struct sigaction act = {0};
     act.sa_sigaction = FSRF::handle_host_fault;
@@ -45,10 +38,12 @@ FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_READ), fpga(0, app_id), app_id(app_
     phys_base = addrs[app_id];
     phys_bound = addrs[app_id] + (16 << 20) / max_apps;
 
-    if (debug)
-        std::cout << "[init]: Flushing device tlb.\n";
-
     flush_tlb();
+}
+
+FSRF::~FSRF(){
+    abort = true;
+    faultHandlerThread.join();
 }
 
 void FSRF::cntrlreg_write(uint64_t addr, uint64_t value)
@@ -77,8 +72,7 @@ uint64_t FSRF::allocate_device_ppn()
             addr += (1 << 12);
             if (addr == phys_bound)
             {
-                std::cerr << "Not enough free pages on FPGA" << std::endl;
-                exit(1);
+                ERR("Not enough free pages on FPGA");
             }
         }
     }
@@ -109,6 +103,7 @@ void FSRF::respond_tlb(uint64_t ppn, uint64_t valid)
 
 void FSRF::flush_tlb()
 {
+    DBG("Flushing tlb");
     uint64_t low_addr = dram_tlb_addr(0);
     uint64_t *bytes = new uint64_t[512];
 
@@ -162,8 +157,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     uint64_t vaddr = vpn << 12;
     uint64_t bytes = 1 << 12;
 
-    if (debug)
-        std::cout << "Handling device fault at: " << (uint64_t *)vaddr << '\n';
+    DBG("Handling device fault at: " << (uint64_t *)vaddr);
 
     // TODO: Lock so that only device or host fault handler can race
     // TODO: check return value
@@ -177,8 +171,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         device_ppn = allocate_device_ppn();
         fpga.dma_write((void *)vaddr, device_ppn << 12, bytes);
 
-        if (debug)
-            std::cout << "Finished dma write\n";
+        DBG("Finished dma write");
     }
     else if (mode == MODE::INV_WRITE)
     {
@@ -187,8 +180,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     }
     else
     {
-        std::cerr << "mmap not yet implemented\n";
-        exit(1);
+        ERR("MMAP mode not implemented");
     }
 
     device_vpn_to_ppn[vpn] = device_ppn;
@@ -207,15 +199,18 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     }
     else
     {
-        std::cerr << "MMAP mode not yet implemented\n";
-        exit(1);
+        ERR("MMAP mode not implemented");
     }
 }
 
 void FSRF::device_fault_listener()
 {
+    DBG("Starting up");
     while (true)
     {
+        if(abort)
+            return;
+
         uint64_t fault = read_tlb_fault();
         if (!(fault & 1) || fault == (uint64_t)-1)
             continue;
@@ -225,7 +220,7 @@ void FSRF::device_fault_listener()
 
         handle_device_fault(read, vpn);
     }
-    std::cerr << "fault listener should never return!\n";
+    ERR("Fault listener should never return!");
 }
 
 void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
@@ -235,9 +230,8 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
     uint64_t err = ((ucontext_t *)ucontext)->uc_mcontext.gregs[REG_ERR];
     bool write_fault = !(err & 0x2);
     uint64_t vpn = missAddress >> 12;
-
-    if (debug)
-        std::cout << "Host trying to access address: " << info->si_addr << "\n";
+   
+    DBG("Host trying to access address: " << info->si_addr);
 
     // if this page is on the device
     if (fsrf->device_vpn_to_ppn.find(vpn) != fsrf->device_vpn_to_ppn.end())
@@ -246,25 +240,25 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 
         if (fsrf->mode == MODE::INV_READ || (write_fault && fsrf->mode == MODE::INV_WRITE))
         {
-            if (debug)
-                std::cout << "Removing " << (uint64_t *)vaddr << " from fpga tlb\n";
+            DBG("Removing " << (uint64_t *)vaddr << " from fpga tlb");
 
             // invalidate on tlb
             fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, false, false, false);
-
             mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
 
-            if (debug)
-                std::cout << "Reading " << (uint64_t *)vaddr << " from fpga to host\n";
+            DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
 
             // dma from device to host
-            fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn], (uint64_t)1 << 12);
+            fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn] << 12, (uint64_t)1 << 12);
+
+            DBG("Finished dma read");
 
             // free up device page
             fsrf->free_device_vpn(vpn);
         }
         else if (fsrf->mode == MODE::INV_WRITE)
         {
+            DBG("Marking " << (uint64_t *)vaddr << " as readonly on fpga tlb");
             // set to readonly on TLB
             fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, true, true, false);
 
@@ -272,21 +266,19 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 
             // dma from device to host
             // we have to dma because the device has written to this page
-            fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn], (uint64_t)1 << 12);
+            fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn] << 12, (uint64_t)1 << 12);
 
+            DBG("Finished dma read");
             // set as readonly on host
             mprotect((void *)vaddr, 1 << 12, PROT_READ);
         }
         else
         {
-            std::cerr << "MMAP not implemented\n";
-            exit(1);
+            ERR("MMAP mode not implemented");
         }
         return;
     }
 
     // Page wasn't supposed to be accessible after all
-    std::cerr << "Host tried to access illegal address: " << info->si_addr << '\n';
-    int raiseError = *(int *)info->si_addr;
-    std::cerr << "This should never print: " << raiseError << '\n';
+    ERR("Host tried to access illegal address: " << info->si_addr);
 }

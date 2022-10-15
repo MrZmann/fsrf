@@ -15,6 +15,8 @@ class FSRF
 {
 public:
     FSRF(uint64_t app_id);
+    ~FSRF();
+
     void cntrlreg_write(uint64_t addr, uint64_t value);
     uint64_t cntrlreg_read(uint64_t addr);
 
@@ -27,6 +29,7 @@ public:
 
 private:
     const static bool debug = true;
+    bool abort = false;
     MODE mode;
     const char* mode_str[4] = {"Invalidate on read", "Invalidate on write", "MMAP"};
 
