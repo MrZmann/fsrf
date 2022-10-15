@@ -169,24 +169,40 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     // TODO: check return value
     mprotect((void *)vaddr, bytes, PROT_READ);
 
-    uint64_t device_ppn = allocate_device_ppn();
-    fpga.dma_write((void *)vaddr, device_ppn << 12, bytes); // appears that the host access vaddr here.
+    uint64_t device_ppn;
+    if (mode == MODE::INV_READ ||
+        // If we are invalidating on write, we need to check if a page is already on the device
+        (mode == MODE::INV_WRITE && device_vpn_to_ppn.find(vpn) == device_vpn_to_ppn.end()))
+    {
+        device_ppn = allocate_device_ppn();
+        fpga.dma_write((void *)vaddr, device_ppn << 12, bytes);
 
-    if (debug)
-        std::cout << "Finished dma write\n";
+        if (debug)
+            std::cout << "Finished dma write\n";
+    }
+    else if (mode == MODE::INV_WRITE)
+    {
+        // the data already exists readonly on the host, so no dma necessary
+        device_ppn = device_vpn_to_ppn[vpn];
+    }
+    else
+    {
+        std::cerr << "mmap not yet implemented\n";
+    }
 
-    if (mode == MODE::INV_READ)
+    device_vpn_to_ppn[vpn] = device_ppn;
+
+    if (mode == MODE::INV_READ ||
+        (mode == MODE::INV_WRITE && !read))
     {
         mprotect((void *)vaddr, bytes, PROT_NONE);
-        // remember that this is on the device
-        device_vpn_to_ppn[vpn] = device_ppn;
-        write_tlb(vpn, device_ppn, true, true, true, false);
+        write_tlb(vpn, device_ppn, true, /*writeable*/ true, true, false);
         respond_tlb(device_ppn, true);
     }
-    elif (mode == MODE::INV_WRITE)
+    else if (mode == MODE::INV_WRITE)
     {
-        std::cerr << "INV_WRITE mode not yet implemented\n";
-        exit(1);
+        write_tlb(vpn, device_ppn, true, /*writeable*/ false, true, false);
+        respond_tlb(device_ppn, true);
     }
     else
     {
@@ -200,8 +216,6 @@ void FSRF::device_fault_listener()
     while (true)
     {
         uint64_t fault = read_tlb_fault();
-        // if(fault != 1062849512059437056 && fault != 0)
-        //     std::cout << "before fault " << fault << "\n";
         if (!(fault & 1) || fault == (uint64_t)-1)
             continue;
 
@@ -217,6 +231,8 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 {
     assert(sig == SIGSEGV);
     uint64_t missAddress = (uint64_t)info->si_addr;
+    uint64_t err = ((ucontext_t *)context)->uc_mcontext.gregs[REG_ERR];
+    bool write_fault = !(err & 0x2);
     uint64_t vpn = missAddress >> 12;
 
     if (debug)
@@ -227,7 +243,7 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
     {
         uint64_t vaddr = vpn << 12;
 
-        if (fsrf->mode == MODE::INV_READ)
+        if (fsrf->mode == MODE::INV_READ || (write_fault && fsrf->mode == MODE::INV_WRITE))
         {
             if (debug)
                 std::cout << "Removing " << (uint64_t *)vaddr << " from fpga tlb\n";
@@ -248,8 +264,17 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
         }
         else if (fsrf->mode == MODE::INV_WRITE)
         {
-            std::cerr << "INV_WRITE not implemented\n";
-            exit(1);
+            // set to readonly on TLB
+            fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, true, true, false);
+
+            mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
+
+            // dma from device to host
+            // we have to dma because the device has written to this page
+            fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn], (uint64_t)1 << 12);
+
+            // set as readonly on host
+            mprotect((void *)vaddr, 1 << 12, PROT_READ);
         }
         else
         {
