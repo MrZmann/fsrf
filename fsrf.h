@@ -18,9 +18,21 @@ public:
     void cntrlreg_write(uint64_t addr, uint64_t value);
     uint64_t cntrlreg_read(uint64_t addr);
 
+    enum MODE
+    {
+        INV_READ = 0,
+        INV_WRITE = 1,
+        MMAP = 2
+    };
+
 private:
+    const bool debug = true;
+    MODE mode;
+    char **mode_str = {"Invalidate on read", "Invalidate on write", "MMAP"}
+
     // device paging
-    std::unordered_map<uint64_t, uint64_t> device_vpn_to_ppn;
+    std::unordered_map<uint64_t, uint64_t>
+        device_vpn_to_ppn;
     std::set<uint64_t> allocated_device_ppns;
     uint64_t phys_base;  // lowest paddr for app_id
     uint64_t phys_bound; // highest paddr for app_id
