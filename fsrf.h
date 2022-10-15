@@ -26,9 +26,9 @@ public:
     };
 
 private:
-    const bool debug = true;
+    const static bool debug = true;
     MODE mode;
-    char **mode_str = {"Invalidate on read", "Invalidate on write", "MMAP"}
+    const char* mode_str[4] = {"Invalidate on read", "Invalidate on write", "MMAP"};
 
     // device paging
     std::unordered_map<uint64_t, uint64_t>

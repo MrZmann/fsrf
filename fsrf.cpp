@@ -7,7 +7,7 @@
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
 
-FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_READ), (0, app_id), app_id(app_id)
+FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_READ), fpga(0, app_id), app_id(app_id)
 {
     if (debug)
     {
@@ -188,6 +188,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     else
     {
         std::cerr << "mmap not yet implemented\n";
+        exit(1);
     }
 
     device_vpn_to_ppn[vpn] = device_ppn;
@@ -231,7 +232,7 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 {
     assert(sig == SIGSEGV);
     uint64_t missAddress = (uint64_t)info->si_addr;
-    uint64_t err = ((ucontext_t *)context)->uc_mcontext.gregs[REG_ERR];
+    uint64_t err = ((ucontext_t *)ucontext)->uc_mcontext.gregs[REG_ERR];
     bool write_fault = !(err & 0x2);
     uint64_t vpn = missAddress >> 12;
 
