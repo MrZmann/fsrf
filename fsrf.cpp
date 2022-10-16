@@ -11,12 +11,12 @@
     std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; \
     exit(1)
 #define PAGE_SIZE 0x1000
+
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
-
 FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_WRITE),
                               fpga(0, app_id),
-                              app_id(app_id),
+                              app_id(app_id)
 {
     DBG("app_id: " << app_id);
     DBG("mode: " << mode_str[mode]);
@@ -80,6 +80,7 @@ void *FSRF::mmap(void *addr_hint, size_t length, int prot, int flags, int fd, of
     assert(length % PAGE_SIZE == 0);
     VME vme{addr, size, prot, nullptr};
     vmes[addr] = vme;
+    return res;
 }
 
 int FSRF::munmap(void *addr, size_t length)
@@ -88,11 +89,12 @@ int FSRF::munmap(void *addr, size_t length)
     uint64_t low = (uint64_t)addr;
     uint64_t high = low + (uint64_t)length;
     auto it = vmes.begin();
-    while (i != vmes.end())
+    while (it != vmes.end())
     {
+        VME vme = it->second;
         // intervals overlap
-        if ((low > it.addr && low < (it.addr + it.size)) ||
-            (high > it.addr && high < (it.addr + it.size)))
+        if ((low > vme.addr && low < (vme.addr + vme.size)) ||
+            (high > vme.addr && high < (vme.addr + vme.size)))
         {
             // unmap from addr to addr + size
 
@@ -104,6 +106,8 @@ int FSRF::munmap(void *addr, size_t length)
             ++it;
         }
     }
+
+    return 0;
 }
 
 uint64_t FSRF::allocate_device_ppn()
