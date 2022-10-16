@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <set>
 #include <signal.h>
 #include <stdint.h>
@@ -20,6 +21,9 @@ public:
     void cntrlreg_write(uint64_t addr, uint64_t value);
     uint64_t cntrlreg_read(uint64_t addr);
 
+    void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+    int munmap(void *addr, size_t length);
+
     enum MODE
     {
         INV_READ = 0,
@@ -31,7 +35,7 @@ private:
     const static bool debug = true;
     bool abort = false;
     MODE mode;
-    const char* mode_str[4] = {"Invalidate on read", "Invalidate on write", "MMAP"};
+    const char *mode_str[3] = {"Invalidate on read", "Invalidate on write", "MMAP"};
 
     // device paging
     std::unordered_map<uint64_t, uint64_t>
@@ -47,8 +51,20 @@ private:
     std::thread faultHandlerThread;
     uint64_t app_id;
 
-    // uint64_t host_vpn_to_ppn(uint64_t ppn);
-    void respond_tlb(uint64_t ppn, uint64_t valid);
+    // mmap info
+    struct VME
+    {
+        uint64_t addr;
+        uint64_t size;
+        int prot;
+
+        VME *next;
+    } typedef VME;
+
+    std::map<uint64_t, VME> vmes;
+
+    void
+    respond_tlb(uint64_t ppn, uint64_t valid);
     uint64_t allocate_device_ppn();
     void free_device_vpn(uint64_t vpn);
     uint64_t read_tlb_fault();

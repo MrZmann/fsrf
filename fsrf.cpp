@@ -4,12 +4,19 @@
 
 #include "fsrf.h"
 
-#define DBG(x) if (debug) std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
-#define ERR(x) std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; exit(1)
+#define DBG(x) \
+    if (debug) \
+    std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
+#define ERR(x)                                                                      \
+    std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; \
+    exit(1)
+#define PAGE_SIZE 0x1000
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
 
-FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_WRITE), fpga(0, app_id), app_id(app_id)
+FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_WRITE),
+                              fpga(0, app_id),
+                              app_id(app_id),
 {
     DBG("app_id: " << app_id);
     DBG("mode: " << mode_str[mode]);
@@ -41,7 +48,8 @@ FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_WRITE), fpga(0, app_id), app_id(app
     flush_tlb();
 }
 
-FSRF::~FSRF(){
+FSRF::~FSRF()
+{
     abort = true;
     faultHandlerThread.join();
 }
@@ -58,6 +66,46 @@ uint64_t FSRF::cntrlreg_read(uint64_t addr)
     return value;
 }
 
+void *FSRF::mmap(void *addr_hint, size_t length, int prot, int flags, int fd, off_t offset)
+{
+    assert(mode == MMAP);
+    void *res = mmap(addr_hint, length, prot, flags, fd, offset);
+    if (res == MAP_FAILED)
+    {
+        return res;
+    }
+
+    uint64_t addr = (uint64_t)res;
+    uint64_t size = (length % PAGE_SIZE) ? length + (PAGE_SIZE - length % PAGE_SIZE) : length;
+    assert(length % PAGE_SIZE == 0);
+    VME vme{addr, size, prot, nullptr};
+    vmes[addr] = vme;
+}
+
+int FSRF::munmap(void *addr, size_t length)
+{
+    assert(mode == MMAP);
+    uint64_t low = (uint64_t)addr;
+    uint64_t high = low + (uint64_t)length;
+    auto it = vmes.begin();
+    while (i != vmes.end())
+    {
+        // intervals overlap
+        if ((low > it.addr && low < (it.addr + it.size)) ||
+            (high > it.addr && high < (it.addr + it.size)))
+        {
+            // unmap from addr to addr + size
+
+            //
+            it = vmes.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
 uint64_t FSRF::allocate_device_ppn()
 {
     uint64_t addr = phys_base;
@@ -65,11 +113,11 @@ uint64_t FSRF::allocate_device_ppn()
     for (auto ppn : allocated_device_ppns)
     {
         // We can map this page!
-        if (ppn >= addr + (1 << 12))
+        if (ppn >= addr + PAGE_SIZE)
             break;
         else
         {
-            addr += (1 << 12);
+            addr += PAGE_SIZE;
             if (addr == phys_bound)
             {
                 ERR("Not enough free pages on FPGA");
@@ -109,7 +157,7 @@ void FSRF::flush_tlb()
 
     for (uint64_t ppn = low_addr; ppn <= 32768; ppn++)
     {
-        fpga.dma_write(bytes, ppn << 12, 0x1000);
+        fpga.dma_write(bytes, ppn << 12, PAGE_SIZE);
     }
 }
 
@@ -208,7 +256,7 @@ void FSRF::device_fault_listener()
     DBG("Starting up");
     while (true)
     {
-        if(abort)
+        if (abort)
             return;
 
         uint64_t fault = read_tlb_fault();
@@ -230,7 +278,7 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
     uint64_t err = ((ucontext_t *)ucontext)->uc_mcontext.gregs[REG_ERR];
     bool write_fault = !(err & 0x2);
     uint64_t vpn = missAddress >> 12;
-   
+
     DBG("Host trying to access address: " << info->si_addr);
 
     // if this page is on the device
