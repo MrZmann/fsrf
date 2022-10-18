@@ -15,15 +15,6 @@ extern FSRF *fsrf;
 class FSRF
 {
 public:
-    FSRF(uint64_t app_id);
-    ~FSRF();
-
-    void cntrlreg_write(uint64_t addr, uint64_t value);
-    uint64_t cntrlreg_read(uint64_t addr);
-
-    void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
-    int munmap(void *addr, size_t length);
-
     enum MODE
     {
         INV_READ = 0,
@@ -31,6 +22,14 @@ public:
         MMAP = 2
     };
 
+   FSRF(uint64_t app_id, MODE mode);
+    ~FSRF();
+
+    void cntrlreg_write(uint64_t addr, uint64_t value);
+    uint64_t cntrlreg_read(uint64_t addr);
+
+    void *fsrf_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+    int fsrf_munmap(void *addr, size_t length);
 private:
     const static bool debug = true;
     bool abort = false;

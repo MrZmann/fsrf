@@ -16,9 +16,12 @@ LDLIBS = -lfpga_mgmt -lrt -lpthread
 
 SRC = ${SDK_DIR}/userspace/utils/sh_dpi_tasks.c
 
-app:
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/my_md5.cpp -o my_md5
-
+read:
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -DINVREAD -o my_md5
+write:
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -DINVWRITE -o my_md5
+mmap:
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -DFSRFMMAP -o my_md5
 reg:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp tests/fpga/reg_test.cpp -o reg_test
 

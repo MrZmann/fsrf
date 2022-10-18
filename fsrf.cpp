@@ -8,13 +8,13 @@
     if (debug) \
     std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
 #define ERR(x)                                                                      \
-    std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; \
-    exit(1)
+{std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; exit(1);}
 #define PAGE_SIZE 0x1000
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
 
-FSRF::FSRF(uint64_t app_id) : mode(MODE::INV_WRITE),
+FSRF::FSRF(uint64_t app_id, MODE mode) : 
+                              mode(mode),
                               fpga(0, app_id),
                               app_id(app_id)
 {
@@ -66,24 +66,28 @@ uint64_t FSRF::cntrlreg_read(uint64_t addr)
     return value;
 }
 
-void *FSRF::mmap(void *addr_hint, size_t length, int prot, int flags, int fd, off_t offset)
+void *FSRF::fsrf_mmap(void *addr_hint, size_t length, int prot, int flags, int fd, off_t offset)
 {
     assert(mode == MMAP);
     void *res = mmap(addr_hint, length, prot, flags, fd, offset);
+    DBG("hola");
     if (res == MAP_FAILED)
     {
+        DBG("mmap failed");
         return res;
     }
 
+    DBG("mmap returned pointer: " << res);
     uint64_t addr = (uint64_t)res;
     uint64_t size = (length % PAGE_SIZE) ? length + (PAGE_SIZE - length % PAGE_SIZE) : length;
+    DBG("Original size: " << length << ", new size: " << size);
     assert(length % PAGE_SIZE == 0);
     VME vme{addr, size, prot, nullptr};
     vmes[addr] = vme;
     return res;
 }
 
-int FSRF::munmap(void *addr, size_t length)
+int FSRF::fsrf_munmap(void *addr, size_t length)
 {
     assert(mode == MMAP);
     uint64_t low = (uint64_t)addr;
@@ -241,16 +245,17 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
             // This is a valid mmapped address
             if (vaddr >= vme.addr && vaddr < vme.addr + vme.size)
             {
+                DBG("Found suitable VME");
                 device_ppn = allocate_device_ppn();
                 fpga.dma_write((void *)vaddr, device_ppn << 12, bytes);
                 valid_addr = true;
                 break;
             }
         }
-        if (!valid_addr)
-            ERR("Invalid device access")
+        if (!valid_addr) ERR("Invalid device access");
     }
 
+    DBG("Device ppn: " << device_ppn);
     device_vpn_to_ppn[vpn] = device_ppn;
 
     if (mode == MODE::INV_READ ||
@@ -273,83 +278,85 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         write_tlb(vpn, device_ppn, true, /*writeable*/ true, true, false);
         respond_tlb(device_ppn, true);
     }
+}
 
-    void FSRF::device_fault_listener()
+void FSRF::device_fault_listener()
+{
+    DBG("Starting up");
+    while (true)
     {
-        DBG("Starting up");
-        while (true)
-        {
-            if (abort)
-                return;
-
-            uint64_t fault = read_tlb_fault();
-            if (!(fault & 1) || fault == (uint64_t)-1)
-                continue;
-
-            bool read = fault & 0x2;
-            uint64_t vpn = (fault >> 2) & 0xFFFFFFFFFFFFF;
-
-            handle_device_fault(read, vpn);
-        }
-        ERR("Fault listener should never return!");
-    }
-
-    void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
-    {
-        assert(sig == SIGSEGV);
-        uint64_t missAddress = (uint64_t)info->si_addr;
-        uint64_t err = ((ucontext_t *)ucontext)->uc_mcontext.gregs[REG_ERR];
-        bool write_fault = !(err & 0x2);
-        uint64_t vpn = missAddress >> 12;
-
-        DBG("Host trying to access address: " << info->si_addr);
-
-        // if this page is on the device
-        if (fsrf->device_vpn_to_ppn.find(vpn) != fsrf->device_vpn_to_ppn.end())
-        {
-            uint64_t vaddr = vpn << 12;
-
-            if (fsrf->mode == MODE::INV_READ || (write_fault && fsrf->mode == MODE::INV_WRITE))
-            {
-                DBG("Removing " << (uint64_t *)vaddr << " from fpga tlb");
-
-                // invalidate on tlb
-                fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, false, false, false);
-                mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
-
-                DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
-
-                // dma from device to host
-                fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn] << 12, (uint64_t)1 << 12);
-
-                DBG("Finished dma read");
-
-                // free up device page
-                fsrf->free_device_vpn(vpn);
-            }
-            else if (fsrf->mode == MODE::INV_WRITE)
-            {
-                DBG("Marking " << (uint64_t *)vaddr << " as readonly on fpga tlb");
-                // set to readonly on TLB
-                fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, true, true, false);
-
-                mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
-
-                // dma from device to host
-                // we have to dma because the device has written to this page
-                fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn] << 12, (uint64_t)1 << 12);
-
-                DBG("Finished dma read");
-                // set as readonly on host
-                mprotect((void *)vaddr, 1 << 12, PROT_READ);
-            }
-            else
-            {
-                ERR("MMAP should not have host faults, something is wrong");
-            }
+        if (abort)
             return;
-        }
 
-        // Page wasn't supposed to be accessible after all
-        ERR("Host tried to access illegal address: " << info->si_addr);
+        uint64_t fault = read_tlb_fault();
+        if (!(fault & 1) || fault == (uint64_t)-1)
+            continue;
+        DBG("Found fault");
+
+        bool read = fault & 0x2;
+        uint64_t vpn = (fault >> 2) & 0xFFFFFFFFFFFFF;
+
+        handle_device_fault(read, vpn);
     }
+    ERR("Fault listener should never return!");
+}
+
+void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
+{
+    assert(sig == SIGSEGV);
+    uint64_t missAddress = (uint64_t)info->si_addr;
+    uint64_t err = ((ucontext_t *)ucontext)->uc_mcontext.gregs[REG_ERR];
+    bool write_fault = !(err & 0x2);
+    uint64_t vpn = missAddress >> 12;
+
+    DBG("Host trying to access address: " << info->si_addr);
+
+    // if this page is on the device
+    if (fsrf->device_vpn_to_ppn.find(vpn) != fsrf->device_vpn_to_ppn.end())
+    {
+        uint64_t vaddr = vpn << 12;
+
+        if (fsrf->mode == MODE::INV_READ || (write_fault && fsrf->mode == MODE::INV_WRITE))
+        {
+            DBG("Removing " << (uint64_t *)vaddr << " from fpga tlb");
+
+            // invalidate on tlb
+            fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, false, false, false);
+            mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
+
+            DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
+
+            // dma from device to host
+            fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn] << 12, (uint64_t)1 << 12);
+
+            DBG("Finished dma read");
+
+            // free up device page
+            fsrf->free_device_vpn(vpn);
+        }
+        else if (fsrf->mode == MODE::INV_WRITE)
+        {
+            DBG("Marking " << (uint64_t *)vaddr << " as readonly on fpga tlb");
+            // set to readonly on TLB
+            fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, true, true, false);
+
+            mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
+
+            // dma from device to host
+            // we have to dma because the device has written to this page
+            fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn] << 12, (uint64_t)1 << 12);
+
+            DBG("Finished dma read");
+            // set as readonly on host
+            mprotect((void *)vaddr, 1 << 12, PROT_READ);
+        }
+        else
+        {
+            ERR("MMAP should not have host faults, something is wrong");
+        }
+        return;
+    }
+
+    // Page wasn't supposed to be accessible after all
+    ERR("Host tried to access illegal address: " << info->si_addr);
+}

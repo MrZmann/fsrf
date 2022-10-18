@@ -1,95 +1,63 @@
-#include <chrono>
-#include "aos.hpp"
-#include "utils.hpp"
+#include <assert.h>
+#include <errno.h>
+#include <iostream>
+#include "fsrf.h"
 
 using namespace std::chrono;
 
-struct config
-{
-	uint32_t abcd[4];
-	uint64_t src_addr;
-	uint64_t rd_credits;
-	uint64_t num_words;
-};
-
 int main(int argc, char *argv[])
 {
-	config configs[4];
-	utils util;
+    const bool debug = true;
+#ifdef INVREAD
+    FSRF fsrf{0, FSRF::MODE::INV_READ};
+    void* buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
+#ifdef INVWRITE
+    FSRF fsrf{0, FSRF::MODE::INV_WRITE};
+    void* buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
+#ifdef FSRFMMAP
+    FSRF fsrf{0, FSRF::MODE::MMAP};
+    void* buf = fsrf.fsrf_mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
+    for(uint64_t i = 0; i < 0x2000 / sizeof(uint64_t); i++){
+        ((uint64_t*) buf)[i] = i;
+    }
 
-	int argi = 1;
-	uint64_t length = 25;
-	if (argi < argc)
-		length = atol(argv[argi]);
-	assert(length <= 34);
-	++argi;
+    assert(((uint64_t*)buf)[0] == 0);
+    assert(((uint64_t*)buf)[0x300] == 0x300);
 
-	uint64_t num_apps;
-	bool populate;
-	util.parse_std_args(argc, argv, argi, num_apps, populate);
+    if(debug) std::cout << "successfully made / populated array\n";
 
-	configs[0].rd_credits = 8;
-	configs[0].num_words = 1 << length;
+    if(buf == MAP_FAILED)
+        printf("Oh dear, something went wrong with mmap: \n\t%s\n", strerror(errno));
 
-	high_resolution_clock::time_point start, end[4];
-	duration<double> diff;
-	double seconds;
+    fsrf.cntrlreg_write(0x10, (uint64_t) buf);  // src_addr
+    fsrf.cntrlreg_write(0x18, 8);               // rd_credits
+    fsrf.cntrlreg_write(0x20,2 * (1 << 12) / 64);  // num 64 byte words
 
-	aos_client *aos[4];
-	util.setup_aos_client(aos);
+    if(debug) std::cout << "successfully wrote cntrlregs\n";
 
-	int fd[4];
-	const char *fnames[4] = {"/mnt/nvme0/file0.bin", "/mnt/nvme0/file1.bin",
-							 "/mnt/nvme0/file2.bin", "/mnt/nvme0/file3.bin"};
-	for (uint64_t app = 0; app < num_apps; ++app)
-	{
-		aos[app]->aos_file_open(fnames[app], fd[app]);
-	}
+    uint64_t val = 0;
+    while(val != 2* (1 << 12) / 64){
+        val = fsrf.cntrlreg_read(0x28);
+    }
+    if(debug) std::cout << "\nfpga is done\n";
 
-	for (uint64_t app = 0; app < num_apps; ++app)
-	{
-		void *addr = nullptr;
-		int flags = populate ? MAP_POPULATE : 0;
+    assert(((uint64_t*)buf)[0] == 0);
+    assert(((uint64_t*)buf)[0x300] == 0x300);
 
-		start = high_resolution_clock::now();
-		length = configs[0].num_words * 64;
-		aos[app]->aos_mmap(addr, length, PROT_READ, flags, fd[app], 0);
-		configs[app].src_addr = (uint64_t)addr;
-		end[0] = high_resolution_clock::now();
-
-		diff = end[0] - start;
-		seconds = diff.count();
-		printf("App %lu mmaped file %d at 0x%lX in %g\n", app,
-			   fd[app], configs[app].src_addr, seconds);
-	}
-
-	// start runs
-	start = high_resolution_clock::now();
-	for (uint64_t app = 0; app < num_apps; ++app)
-	{
-		// important, src_addr -> 4k aligned
-		aos[app]->aos_cntrlreg_write(0x10, configs[app].src_addr);
-		aos[app]->aos_cntrlreg_write(0x18, configs[0].rd_credits);
-
-		// important -> number of 64 byte words to access
-		aos[app]->aos_cntrlreg_write(0x20, configs[0].num_words);
-	}
-
+    if(debug){
+        val = fsrf.cntrlreg_read(0x0);
+        std::cout << "ab: " << val << "\n";
+        val = fsrf.cntrlreg_read(0x8);
+        std::cout << "cd: " << val << "\n";
+    }
 	// end runs
 	// important -> polls on completion register
-	util.finish_runs(aos, end, 0x28, true, configs[0].num_words);
+	// util.finish_runs(aos, end, 0x28, true, configs[0].num_words);
 	// important -> answer lives in cntrlreg_read 0x0, 0x8
 
-	// print stats
-	uint64_t app_bytes = configs[0].num_words * 64;
-	util.print_stats("md5", app_bytes, start, end);
-
-	length = configs[0].num_words * 64;
-	for (uint64_t app = 0; app < num_apps; ++app)
-	{
-		aos[app]->aos_munmap((void *)configs[app].src_addr, length);
-		aos[app]->aos_file_close(fd[app]);
-	}
 
 	return 0;
 }
