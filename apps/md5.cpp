@@ -12,14 +12,12 @@ int main(int argc, char *argv[])
     bool debug = argsparse.getVerbose();
     FSRF::MODE mode = argsparse.getMode();
 
-    FSRF fsrf{0, mode}; 
+    FSRF fsrf{argsparse.getAppId(), mode};
     void *buf;
 
     switch (mode)
     {
     case FSRF::MODE::INV_READ:
-        buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        break;
     case FSRF::MODE::INV_WRITE:
         buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         break;
