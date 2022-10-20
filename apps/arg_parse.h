@@ -6,10 +6,10 @@ class ArgParse
 {
     FSRF::MODE mode;
     int verbose;
-    int app_id;
+    uint64_t app_id;
 
 public:
-    ArgParse(int argc, char **argv) : mode(FSRF::MODE::NONE), verbose(false), app_id(-1)
+    ArgParse(int argc, char **argv) : mode(FSRF::MODE::NONE), verbose(false), app_id(~0L)
     {
         read_args(argc, argv);
     }
@@ -24,7 +24,7 @@ public:
         return verbose;
     }
 
-    int getAppId()
+    uint64_t getAppId()
     {
         return app_id;
     }
@@ -33,7 +33,7 @@ private:
     void read_args(int argc, char **argv)
     {
         int opt;
-        while ((opt = getopt(argc, argv, ":ma:v")) != -1)
+        while ((opt = getopt(argc, argv, "a:m:v")) != -1)
         {
             switch (opt)
             {
@@ -67,7 +67,7 @@ private:
                 break;
             }
         }
-        if (app_id < 0 || app_id > 3)
+        if (app_id > 3)
         {
             std::cerr << "App id (-a) must be in range [0,3]\n";
             exit(1);

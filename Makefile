@@ -16,12 +16,13 @@ LDLIBS = -lfpga_mgmt -lrt -lpthread
 
 SRC = ${SDK_DIR}/userspace/utils/sh_dpi_tasks.c
 
-read:
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -DINVREAD -o my_md5
-write:
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -DINVWRITE -o my_md5
-mmap:
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -DFSRFMMAP -o my_md5
+md5:
+	@sudo fpga-load-local-image -D -S 0 -I agfi-0a9192afc18f97549
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -o md5.out
+aes:
+	@sudo fpga-load-local-image -D -S 0 -I agfi-0057779ad2eb6dae4
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/aes.cpp -o aes.out
+
 reg:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp tests/fpga/reg_test.cpp -o reg_test
 

@@ -1,3 +1,5 @@
+#include <iostream>
+#include <stdio.h>
 #include "arg_parse.h"
 #include "fsrf.h"
 
@@ -16,11 +18,11 @@ int main(int argc, char *argv[])
     {
     case FSRF::MODE::INV_READ:
     case FSRF::MODE::INV_WRITE:
-        buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        src = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         dest = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         break;
     case FSRF::MODE::MMAP:
-        buf = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+        src = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
         dest = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
         break;
     default:
@@ -36,8 +38,8 @@ int main(int argc, char *argv[])
     fsrf.cntrlreg_write(0x10, 3);
     fsrf.cntrlreg_write(0x18, 4);
 
-    fsrf.cntrlreg_write(0x20, src);  // where to read from
-    fsrf.cntrlreg_write(0x28, dest); // where to write to
+    fsrf.cntrlreg_write(0x20, (uint64_t) src);  // where to read from
+    fsrf.cntrlreg_write(0x28, (uint64_t) dest); // where to write to
     fsrf.cntrlreg_write(0x38, 8);    // read credits
     fsrf.cntrlreg_write(0x40, 8);    // write credits
 
