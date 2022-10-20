@@ -20,6 +20,8 @@ FSRF::FSRF(uint64_t app_id, MODE mode) : mode(mode),
                                          fpga(0, app_id),
                                          app_id(app_id)
 {
+    if(app_id > 3)
+        ERR("app_id must be in range [0, 3]");
     if(mode == FSRF::MODE::NONE)
         ERR("Mode must not be none");
     DBG("app_id: " << app_id);
