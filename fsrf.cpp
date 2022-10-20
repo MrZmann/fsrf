@@ -7,16 +7,18 @@
 #define DBG(x) \
     if (debug) \
     std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
-#define ERR(x)                                                                      \
-{std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; exit(1);}
+#define ERR(x)                                                                          \
+    {                                                                                   \
+        std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; \
+        exit(1);                                                                        \
+    }
 #define PAGE_SIZE 0x1000
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
 
-FSRF::FSRF(uint64_t app_id, MODE mode) : 
-                              mode(mode),
-                              fpga(0, app_id),
-                              app_id(app_id)
+FSRF::FSRF(uint64_t app_id, MODE mode) : mode(mode),
+                                         fpga(0, app_id),
+                                         app_id(app_id)
 {
     DBG("app_id: " << app_id);
     DBG("mode: " << mode_str[mode]);
@@ -66,10 +68,10 @@ uint64_t FSRF::cntrlreg_read(uint64_t addr)
     return value;
 }
 
-void *FSRF::fsrf_mmap(void *addr_hint, size_t length, int prot, int flags, int fd, off_t offset)
+void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t device_permissions)
 {
     assert(mode == MMAP);
-    void *res = mmap(addr_hint, length, prot, flags, fd, offset);
+    void *res = mmap(0, length, host_permissions, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     DBG("hola");
     if (res == MAP_FAILED)
     {
@@ -85,6 +87,51 @@ void *FSRF::fsrf_mmap(void *addr_hint, size_t length, int prot, int flags, int f
     VME vme{addr, size, prot, nullptr};
     vmes[addr] = vme;
     return res;
+}
+
+void FSRF::sync_device_to_host(uint64_t *addr)
+{
+    assert(mode == MMAP);
+    uint64_t low = (uint64_t)addr;
+    uint64_t high = low + (uint64_t)length;
+    auto it = vmes.begin();
+    while (it != vmes.end())
+    {
+        VME vme = it->second;
+        // intervals overlap
+        if ((low > vme.addr && low < (vme.addr + vme.size)) ||
+            (high > vme.addr && high < (vme.addr + vme.size)))
+        {
+            // unmap from addr to addr + size
+            // if the user wanted this data written to host, they should have called msync.
+            for (uint64_t vpn = vme.addr; vpn < vme.addr + vme.size; ++vpn)
+            {
+                uint64_t vaddr = vpn << 12;
+                // this page was never put on the device
+                if (device_vpn_to_ppn.find(vpn) == device_vpn_to_ppn.end())
+                    continue;
+
+                write_tlb(vpn, device_vpn_to_ppn[vpn], false, false, false, false);
+                mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
+
+                DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
+
+                // dma from device to host
+                fpga.dma_read((void *)vaddr, device_vpn_to_ppn[vpn] << 12, (uint64_t)1 << 12);
+
+                DBG("Finished dma read");
+
+                // free up device page
+                fsrf->free_device_vpn(vpn);
+            }
+            it = vmes.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+    return 0;
 }
 
 int FSRF::fsrf_munmap(void *addr, size_t length)
@@ -252,7 +299,8 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
                 break;
             }
         }
-        if (!valid_addr) ERR("Invalid device access");
+        if (!valid_addr)
+            ERR("Invalid device access");
     }
 
     DBG("Device ppn: " << device_ppn);

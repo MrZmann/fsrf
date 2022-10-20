@@ -22,14 +22,22 @@ public:
         MMAP = 2
     };
 
-   FSRF(uint64_t app_id, MODE mode);
+    FSRF(uint64_t app_id, MODE mode);
     ~FSRF();
 
     void cntrlreg_write(uint64_t addr, uint64_t value);
     uint64_t cntrlreg_read(uint64_t addr);
 
-    void *fsrf_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
-    int fsrf_munmap(void *addr, size_t length);
+    /*
+    flags -
+    permissions on fpga
+    single use
+    random access vs sequential
+    */
+
+    void *fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t device_permissions);
+    void sync_device_to_host(uint64_t *addr);
+
 private:
     const static bool debug = true;
     bool abort = false;
