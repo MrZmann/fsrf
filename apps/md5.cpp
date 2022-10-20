@@ -2,62 +2,81 @@
 #include <errno.h>
 #include <iostream>
 #include "fsrf.h"
+namespace po = boost::program_options;
 
 using namespace std::chrono;
 
 int main(int argc, char *argv[])
 {
+    po::options_description desc("Allowed options");
+    desc.add_options()("help", "help message")("c", po::value<std::string>() "consistency type")("v", "verbose");
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(ac, av, desc), vm);
+    po::notify(vm);
+
+    if (vm.count("help"))
+    {
+        cout << desc << "\n";
+        return 1;
+    }
+
     const bool debug = true;
 #ifdef INVREAD
     FSRF fsrf{0, FSRF::MODE::INV_READ};
-    void* buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 #endif
 #ifdef INVWRITE
     FSRF fsrf{0, FSRF::MODE::INV_WRITE};
-    void* buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 #endif
 #ifdef FSRFMMAP
     FSRF fsrf{0, FSRF::MODE::MMAP};
-    void* buf = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+    void *buf = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
 #endif
-    for(uint64_t i = 0; i < 0x2000 / sizeof(uint64_t); i++){
-        ((uint64_t*) buf)[i] = i;
+    for (uint64_t i = 0; i < 0x2000 / sizeof(uint64_t); i++)
+    {
+        ((uint64_t *)buf)[i] = i;
     }
 
-    assert(((uint64_t*)buf)[0] == 0);
-    assert(((uint64_t*)buf)[0x300] == 0x300);
+    assert(((uint64_t *)buf)[0] == 0);
+    assert(((uint64_t *)buf)[0x300] == 0x300);
 
-    if(debug) std::cout << "successfully made / populated array\n";
+    if (debug)
+        std::cout << "successfully made / populated array\n";
 
-    if(buf == MAP_FAILED)
+    if (buf == MAP_FAILED)
         printf("Oh dear, something went wrong with mmap: \n\t%s\n", strerror(errno));
 
-    fsrf.cntrlreg_write(0x10, (uint64_t) buf);  // src_addr
-    fsrf.cntrlreg_write(0x18, 8);               // rd_credits
-    fsrf.cntrlreg_write(0x20,2 * (1 << 12) / 64);  // num 64 byte words
+    fsrf.cntrlreg_write(0x10, (uint64_t)buf);      // src_addr
+    fsrf.cntrlreg_write(0x18, 8);                  // rd_credits
+    fsrf.cntrlreg_write(0x20, 2 * (1 << 12) / 64); // num 64 byte words
 
-    if(debug) std::cout << "successfully wrote cntrlregs\n";
+    if (debug)
+        std::cout << "successfully wrote cntrlregs\n";
 
     uint64_t val = 0;
-    while(val != 2* (1 << 12) / 64){
+    while (val != 2 * (1 << 12) / 64)
+    {
         val = fsrf.cntrlreg_read(0x28);
     }
-    if(debug) std::cout << "\nfpga is done\n";
+    if (debug)
+        std::cout << "\nfpga is done\n";
 
-    assert(((uint64_t*)buf)[0] == 0);
-    assert(((uint64_t*)buf)[0x300] == 0x300);
+    assert(((uint64_t *)buf)[0] == 0);
+    assert(((uint64_t *)buf)[0x300] == 0x300);
 
-    if(debug){
+    if (debug)
+    {
         val = fsrf.cntrlreg_read(0x0);
         std::cout << "ab: " << val << "\n";
         val = fsrf.cntrlreg_read(0x8);
         std::cout << "cd: " << val << "\n";
     }
-	// end runs
-	// important -> polls on completion register
-	// util.finish_runs(aos, end, 0x28, true, configs[0].num_words);
-	// important -> answer lives in cntrlreg_read 0x0, 0x8
+    // end runs
+    // important -> polls on completion register
+    // util.finish_runs(aos, end, 0x28, true, configs[0].num_words);
+    // important -> answer lives in cntrlreg_read 0x0, 0x8
 
-
-	return 0;
+    return 0;
 }
