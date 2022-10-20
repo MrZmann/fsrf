@@ -2,38 +2,35 @@
 #include <errno.h>
 #include <iostream>
 #include "fsrf.h"
-namespace po = boost::program_options;
 
 using namespace std::chrono;
 
 int main(int argc, char *argv[])
 {
-    po::options_description desc("Allowed options");
-    desc.add_options()("help", "help message")("c", po::value<std::string>() "consistency type")("v", "verbose");
+    Args args{argc, argv};
+    const bool debug = args.isVerbose();
 
-    po::variables_map vm;
-    po::store(po::parse_command_line(ac, av, desc), vm);
-    po::notify(vm);
+    FSRF fsrf;
+    void *buf;
 
-    if (vm.count("help"))
+    switch (args.getMode())
     {
-        cout << desc << "\n";
-        return 1;
+    case FSRF::MODE::INV_READ:
+        fsrf{0, FSRF::MODE::INV_READ};
+        void *buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        break;
+    case FSRF::MODE::INV_WRITE:
+        fsrf{0, FSRF::MODE::INV_WRITE};
+        void *buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        break;
+    case FSRF::MODE::MMAP:
+        fsrf{0, FSRF::MODE::MMAP};
+        void *buf = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+        break;
+    default:
+        std::cerr << "unexpected mode\n";
     }
 
-    const bool debug = true;
-#ifdef INVREAD
-    FSRF fsrf{0, FSRF::MODE::INV_READ};
-    void *buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-#endif
-#ifdef INVWRITE
-    FSRF fsrf{0, FSRF::MODE::INV_WRITE};
-    void *buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-#endif
-#ifdef FSRFMMAP
-    FSRF fsrf{0, FSRF::MODE::MMAP};
-    void *buf = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
-#endif
     for (uint64_t i = 0; i < 0x2000 / sizeof(uint64_t); i++)
     {
         ((uint64_t *)buf)[i] = i;
