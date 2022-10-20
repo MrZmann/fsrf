@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
 #endif
 #ifdef FSRFMMAP
     FSRF fsrf{0, FSRF::MODE::MMAP};
-    void* buf = fsrf.fsrf_mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void* buf = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
 #endif
     for(uint64_t i = 0; i < 0x2000 / sizeof(uint64_t); i++){
         ((uint64_t*) buf)[i] = i;

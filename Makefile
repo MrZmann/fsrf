@@ -34,4 +34,5 @@ test:
 	@make -s dma
 	@sudo ./reg_test > /dev/null
 	@sudo ./dma_test > /dev/null
-	@rm -f reg dma
+	@rm -f reg_test dma_test
+

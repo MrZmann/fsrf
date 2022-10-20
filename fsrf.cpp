@@ -84,12 +84,12 @@ void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t dev
     uint64_t size = (length % PAGE_SIZE) ? length + (PAGE_SIZE - length % PAGE_SIZE) : length;
     DBG("Original size: " << length << ", new size: " << size);
     assert(length % PAGE_SIZE == 0);
-    VME vme{addr, size, prot, nullptr};
+    VME vme{addr, size, device_permissions, nullptr};
     vmes[addr] = vme;
     return res;
 }
 
-void FSRF::sync_device_to_host(uint64_t *addr)
+void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
 {
     assert(mode == MMAP);
     uint64_t low = (uint64_t)addr;
@@ -99,7 +99,7 @@ void FSRF::sync_device_to_host(uint64_t *addr)
     {
         VME vme = it->second;
         // intervals overlap
-        if ((low > vme.addr && low < (vme.addr + vme.size)) ||
+        if ((low >= vme.addr && low < (vme.addr + vme.size)) ||
             (high > vme.addr && high < (vme.addr + vme.size)))
         {
             // unmap from addr to addr + size
@@ -131,26 +131,30 @@ void FSRF::sync_device_to_host(uint64_t *addr)
             ++it;
         }
     }
-    return 0;
 }
 
-int FSRF::fsrf_munmap(void *addr, size_t length)
+
+void FSRF::fsrf_free(uint64_t *addr)
 {
     assert(mode == MMAP);
-    uint64_t low = (uint64_t)addr;
-    uint64_t high = low + (uint64_t)length;
     auto it = vmes.begin();
     while (it != vmes.end())
     {
         VME vme = it->second;
-        // intervals overlap
-        if ((low > vme.addr && low < (vme.addr + vme.size)) ||
-            (high > vme.addr && high < (vme.addr + vme.size)))
+        if ((uint64_t) addr >= vme.addr && (uint64_t) addr < (vme.addr + vme.size))
         {
             // unmap from addr to addr + size
             // if the user wanted this data written to host, they should have called msync.
             for (uint64_t vpn = vme.addr; vpn < vme.addr + vme.size; ++vpn)
             {
+                // this page was never put on the device
+                if (device_vpn_to_ppn.find(vpn) == device_vpn_to_ppn.end())
+                    continue;
+
+                write_tlb(vpn, device_vpn_to_ppn[vpn], false, false, false, false);
+                // No DMA back on free
+
+                // free up device page
                 fsrf->free_device_vpn(vpn);
             }
             it = vmes.erase(it);
@@ -160,7 +164,6 @@ int FSRF::fsrf_munmap(void *addr, size_t length)
             ++it;
         }
     }
-    return 0;
 }
 
 uint64_t FSRF::allocate_device_ppn()

@@ -36,7 +36,9 @@ public:
     */
 
     void *fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t device_permissions);
-    void sync_device_to_host(uint64_t *addr);
+    void sync_device_to_host(uint64_t *addr, size_t length);
+
+    void fsrf_free(uint64_t* addr);
 
 private:
     const static bool debug = true;
@@ -63,7 +65,7 @@ private:
     {
         uint64_t addr;
         uint64_t size;
-        int prot;
+        uint64_t prot;
 
         VME *next;
     } typedef VME;
