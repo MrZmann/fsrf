@@ -3,32 +3,32 @@
 #include <iostream>
 #include "fsrf.h"
 
+#include "arg_parse.h"
 using namespace std::chrono;
 
 int main(int argc, char *argv[])
 {
-    Args args{argc, argv};
-    const bool debug = args.isVerbose();
+    ArgParse argsparse(argc, argv);
+    bool debug = argsparse.getVerbose();
+    FSRF::MODE mode = argsparse.getMode();
 
-    FSRF fsrf;
+    FSRF fsrf{0, mode}; 
     void *buf;
 
-    switch (args.getMode())
+    switch (mode)
     {
     case FSRF::MODE::INV_READ:
-        fsrf{0, FSRF::MODE::INV_READ};
-        void *buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         break;
     case FSRF::MODE::INV_WRITE:
-        fsrf{0, FSRF::MODE::INV_WRITE};
-        void *buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         break;
     case FSRF::MODE::MMAP:
-        fsrf{0, FSRF::MODE::MMAP};
-        void *buf = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+        buf = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
         break;
     default:
         std::cerr << "unexpected mode\n";
+        exit(1);
     }
 
     for (uint64_t i = 0; i < 0x2000 / sizeof(uint64_t); i++)

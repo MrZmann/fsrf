@@ -20,6 +20,8 @@ FSRF::FSRF(uint64_t app_id, MODE mode) : mode(mode),
                                          fpga(0, app_id),
                                          app_id(app_id)
 {
+    if(mode == FSRF::MODE::NONE)
+        ERR("Mode must not be none");
     DBG("app_id: " << app_id);
     DBG("mode: " << mode_str[mode]);
 

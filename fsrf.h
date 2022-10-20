@@ -17,6 +17,7 @@ class FSRF
 public:
     enum MODE
     {
+        NONE = -1,
         INV_READ = 0,
         INV_WRITE = 1,
         MMAP = 2
