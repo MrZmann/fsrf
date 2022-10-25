@@ -83,10 +83,10 @@ private:
     void flush_tlb();
     void write_tlb(uint64_t vpn,
                    uint64_t ppn,
-                   bool writeable,
-                   bool readable,
-                   bool present,
-                   bool huge);
+                   uint64_t writeable,
+                   uint64_t readable,
+                   uint64_t present,
+                   uint64_t huge);
 
     void evict_tlb();
 

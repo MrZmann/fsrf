@@ -15,21 +15,22 @@ int main(int argc, char *argv[])
     FSRF fsrf{argsparse.getAppId(), mode};
     void *buf;
 
+    uint64_t size = 0x4000;
     switch (mode)
     {
     case FSRF::MODE::INV_READ:
     case FSRF::MODE::INV_WRITE:
-        buf = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        buf = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         break;
     case FSRF::MODE::MMAP:
-        buf = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+        buf = fsrf.fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
         break;
     default:
         std::cerr << "unexpected mode\n";
         exit(1);
     }
 
-    for (uint64_t i = 0; i < 0x2000 / sizeof(uint64_t); i++)
+    for (uint64_t i = 0; i < size / sizeof(uint64_t); i++)
     {
         ((uint64_t *)buf)[i] = i;
     }
@@ -45,13 +46,13 @@ int main(int argc, char *argv[])
 
     fsrf.cntrlreg_write(0x10, (uint64_t)buf);      // src_addr
     fsrf.cntrlreg_write(0x18, 8);                  // rd_credits
-    fsrf.cntrlreg_write(0x20, 2 * (1 << 12) / 64); // num 64 byte words
+    fsrf.cntrlreg_write(0x20, size / 64); // num 64 byte words
 
     if (debug)
         std::cout << "successfully wrote cntrlregs\n";
 
     uint64_t val = 0;
-    while (val != 2 * (1 << 12) / 64)
+    while (val != size / 64)
     {
         val = fsrf.cntrlreg_read(0x28);
     }

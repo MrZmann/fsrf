@@ -16,6 +16,9 @@ LDLIBS = -lfpga_mgmt -lrt -lpthread
 
 SRC = ${SDK_DIR}/userspace/utils/sh_dpi_tasks.c
 
+page:
+	@sudo fpga-load-local-image -D -S 0 -I agfi-0d3be5dce212b307f
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/pagerank.cpp -o pagerank.out
 md5:
 	@sudo fpga-load-local-image -D -S 0 -I agfi-0a9192afc18f97549
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -o md5.out

@@ -48,8 +48,11 @@ FSRF::FSRF(uint64_t app_id, MODE mode) : mode(mode),
     sigaction(SIGSEGV, &act, NULL);
 
     uint64_t addrs[4] = {0, 8 << 20, 4 << 20, 12 << 20};
-    phys_base = addrs[app_id];
+    // offset 128 MB for TLB
+    phys_base = (128 << 20) + addrs[app_id];
     phys_bound = addrs[app_id] + (16 << 20) / max_apps;
+
+
 
     flush_tlb();
 }
@@ -189,6 +192,8 @@ uint64_t FSRF::allocate_device_ppn()
         }
     }
 
+    DBG("addr: " << addr);
+
     allocated_device_ppns.insert(addr);
 
     return addr >> 12;
@@ -227,10 +232,10 @@ void FSRF::flush_tlb()
 
 void FSRF::write_tlb(uint64_t vpn,
                      uint64_t ppn,
-                     bool writeable,
-                     bool readable,
-                     bool present,
-                     bool huge)
+                     uint64_t writeable,
+                     uint64_t readable,
+                     uint64_t present,
+                     uint64_t huge)
 {
     assert(!huge);
 
@@ -241,6 +246,7 @@ void FSRF::write_tlb(uint64_t vpn,
 
     uint64_t tlb_addr = dram_tlb_addr(vpn);
     uint64_t entry = (vpn << 28) | (ppn << 4) | (writeable << 2) | (readable << 1) | present;
+    DBG("Entry " << (void*) entry);
 
     fpga.write_mem_reg(tlb_addr, entry);
 }
@@ -313,16 +319,17 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     DBG("Device ppn: " << device_ppn);
     device_vpn_to_ppn[vpn] = device_ppn;
 
-    if (mode == MODE::INV_READ ||
-        (mode == MODE::INV_WRITE && !read))
+    if (mode == MODE::INV_READ || (mode == MODE::INV_WRITE && !read)) 
     {
         mprotect((void *)vaddr, bytes, PROT_NONE);
-        write_tlb(vpn, device_ppn, true, /*writeable*/ true, true, false);
+        write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
         respond_tlb(device_ppn, true);
+    
     }
-    else if (mode == MODE::INV_WRITE)
+    else if (mode == MODE::INV_WRITE && read)
     {
-        write_tlb(vpn, device_ppn, true, /*writeable*/ false, true, false);
+        mprotect((void *)vaddr, bytes, PROT_READ);
+        write_tlb(vpn, device_ppn, /*writeable*/ false, true, true, false);
         respond_tlb(device_ppn, true);
     }
     else
@@ -330,7 +337,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         // both host and device can read / write
         // TODO actually use VME permissions
         mprotect((void *)vaddr, bytes, PROT_READ | PROT_WRITE);
-        write_tlb(vpn, device_ppn, true, /*writeable*/ true, true, false);
+        write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
         respond_tlb(device_ppn, true);
     }
 }
@@ -349,7 +356,15 @@ void FSRF::device_fault_listener()
         DBG("Found fault");
 
         bool read = fault & 0x2;
+        if(read) {
+            DBG("Device tried to read");
+        } else {
+            DBG("Device tried to write");
+        }
+
         uint64_t vpn = (fault >> 2) & 0xFFFFFFFFFFFFF;
+
+        DBG("vpn: " << (void*) vpn);
 
         handle_device_fault(read, vpn);
     }
