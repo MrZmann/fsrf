@@ -14,16 +14,17 @@ int main(int argc, char *argv[])
     void *src;
     void *dest;
 
+    int size = 0x4000;
     switch (mode)
     {
     case FSRF::MODE::INV_READ:
     case FSRF::MODE::INV_WRITE:
-        src = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        dest = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        src = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        dest = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         break;
     case FSRF::MODE::MMAP:
-        src = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
-        dest = fsrf.fsrf_malloc(0x2000, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+        src = fsrf.fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+        dest = fsrf.fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
         break;
     default:
         std::cerr << "unexpected mode\n";
@@ -44,7 +45,7 @@ int main(int argc, char *argv[])
     fsrf.cntrlreg_write(0x40, 8);    // write credits
 
     // write this last because it starts the app
-    fsrf.cntrlreg_write(0x30, 0x2000 / 64); // num words
+    fsrf.cntrlreg_write(0x30, size / 64); // num words
 
     uint64_t val = 1;
     while (val != 0)
@@ -52,5 +53,6 @@ int main(int argc, char *argv[])
         val = fsrf.cntrlreg_read(0x38);
     }
 
+    for(int i = 0; i < 0x1000000; i++) {}
     return 0;
 }
