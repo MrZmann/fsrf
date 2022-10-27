@@ -1,8 +1,5 @@
-#include <chrono>
-#include "aos.hpp"
-#include "utils.hpp"
-
-using namespace std::chrono;
+#include "arg_parse.h"
+#include "fsrf.h"
 
 struct config {
     uint64_t s0_addr;
@@ -18,6 +15,13 @@ struct config {
 };
 
 int main(int argc, char *argv[]) {
+    ArgParse argsparse(argc, argv);
+    uint64_t app = argsparse.getAppId();
+    FSRF::MODE mode = argsparse.getMode();
+    bool debug = argsparse.getVerbose();
+
+    FSRF fsrf {app, mode, debug};
+
 	const uint64_t s_ratio = 512/128;
 	const uint64_t sc_ratio = 512/8;
 	
@@ -31,37 +35,40 @@ int main(int argc, char *argv[]) {
 	configs[0].sc_words = (configs[0].sc_count+sc_ratio-1) / sc_ratio;
 	
 	
+    int flags = populate ? MAP_POPULATE : 0;
+    uint64_t offset = 0;
+    
+    length0 = configs[0].s0_words * 64;
+
+    void* addr = mmap(0, length0, PROT_READ, flags, fd[app], offset);
+    configs[app].s0_addr = (uint64_t)addr;
+    offset += length0;
+
+    length1 = configs[0].s1_words * 64;
+    
+    addr = mmap(0, length1, PROT_READ, flags, fd[app], offset);
+    configs[app].s1_addr = (uint64_t)addr;
+    offset += length1;
+
+    length1 = configs[0].sc_words * 64;
+
+    addr = mmap(0, length1, PROT_WRITE, flags, fd[app], offset);
+    configs[app].sc_addr = (uint64_t)addr;
+	
+    fsrf.cntrlreg_write(0x00, configs[app].s0_addr);
+    fsrf.cntrlreg_write(0x08, configs[0].s0_words);
+    fsrf.cntrlreg_write(0x10, configs[app].s1_addr);
+    fsrf.cntrlreg_write(0x18, configs[0].s1_words);
+    fsrf.cntrlreg_write(0x20, configs[0].s1_credit);
+    fsrf.cntrlreg_write(0x28, configs[0].sc_count);
+    fsrf.cntrlreg_write(0x30, configs[app].sc_addr);
+    fsrf.cntrlreg_write(0x38, configs[0].sc_words);
+	
+    uint64_t val = 1;
+    while (val != 0)
     {
-        uint64_t app = 0;
-		int flags = populate ? MAP_POPULATE : 0;
-		uint64_t offset = 0;
-		
-		length0 = configs[0].s0_words * 64;
-		void* addr = mmap(0, length0, PROT_READ, flags, fd[app], offset);
-		configs[app].s0_addr = (uint64_t)addr;
-		offset += length0;
-		length1 = configs[0].s1_words * 64;
-		aos[app]->aos_mmap(addr, length1, PROT_READ, flags, fd[app], offset);
-		configs[app].s1_addr = (uint64_t)addr;
-		offset += length1;
-		length1 = configs[0].sc_words * 64;
-		aos[app]->aos_mmap(addr, length1, PROT_WRITE, flags, fd[app], offset);
-		configs[app].sc_addr = (uint64_t)addr;
-	}
-	
-	// start runs
-	start = high_resolution_clock::now();
-	for (uint64_t app = 0; app < num_apps; ++app) {
-		aos[app]->aos_cntrlreg_write(0x00, configs[app].s0_addr);
-		aos[app]->aos_cntrlreg_write(0x08, configs[0].s0_words);
-		aos[app]->aos_cntrlreg_write(0x10, configs[app].s1_addr);
-		aos[app]->aos_cntrlreg_write(0x18, configs[0].s1_words);
-		aos[app]->aos_cntrlreg_write(0x20, configs[0].s1_credit);
-		aos[app]->aos_cntrlreg_write(0x28, configs[0].sc_count);
-		aos[app]->aos_cntrlreg_write(0x30, configs[app].sc_addr);
-		aos[app]->aos_cntrlreg_write(0x38, configs[0].sc_words);
-	}
-	
-	// end runs
-	util.finish_runs(aos, end, 0x48, true, 0);
+        val = fsrf.cntrlreg_read(0x48);
+    }
+
+    return 0;
 }	

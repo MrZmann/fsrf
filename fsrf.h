@@ -24,7 +24,7 @@ public:
     };
 
 
-    FSRF(uint64_t app_id, MODE mode);
+    FSRF(uint64_t app_id, MODE mode, bool debug);
     ~FSRF();
 
     static const char* mode_str(MODE mode);
@@ -45,7 +45,7 @@ public:
     void fsrf_free(uint64_t* addr);
 
 private:
-    const static bool debug = false;
+    bool debug;
     bool abort = false;
     MODE mode;
 

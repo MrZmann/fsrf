@@ -1,6 +1,5 @@
+#include "arg_parse.h"
 #include "fsrf.h"
-
-using namespace std::chrono;
 
 struct config {
 	uint64_t num_verts;
@@ -14,8 +13,12 @@ struct config {
 };
 
 int main(int argc, char *argv[]) {
-    uint64_t app = 0;
-    FSRF fsrf{app, FSRF::MODE::INV_READ};
+    ArgParse argsparse(argc, argv);
+    uint64_t app = argsparse.getAppId();
+    FSRF::MODE mode = argsparse.getMode();
+    bool debug = argsparse.getVerbose();
+
+    FSRF fsrf{app, mode, debug};
 	config configs[4];
 	
 	configs[0].num_verts = 1000448;

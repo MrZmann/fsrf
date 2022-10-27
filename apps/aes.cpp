@@ -7,10 +7,10 @@ int main(int argc, char *argv[])
 {
 
     ArgParse argsparse(argc, argv);
-    bool debug = argsparse.getVerbose();
     FSRF::MODE mode = argsparse.getMode();
+    bool debug = argsparse.getVerbose();
 
-    FSRF fsrf{argsparse.getAppId(), mode};
+    FSRF fsrf{argsparse.getAppId(), mode, debug};
     void *src;
     void *dest;
 
@@ -53,6 +53,5 @@ int main(int argc, char *argv[])
         val = fsrf.cntrlreg_read(0x38);
     }
 
-    for(int i = 0; i < 0x1000000; i++) {}
     return 0;
 }

@@ -48,7 +48,7 @@ FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
             exit(EXIT_FAILURE);
         }
     }
-    printf("xfer_buf phys base: 0x%lX\n", phys_buf);
+    // printf("xfer_buf phys base: 0x%lX\n", phys_buf);
 out:
     return;
 }

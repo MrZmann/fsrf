@@ -31,14 +31,14 @@ int main(int argc, char *argv[])
             if(debug) 
             {
                 std::cout <<"making child with mode: " << FSRF::mode_str(mode) << "\n";
-                execl("/home/centos/fsrf/md5.out", "/home/centos/fsrf/md5.out",
+                execl("/home/centos/fsrf/pagerank.out", "/home/centos/fsrf/pagerank.out",
                         "-a", std::to_string(i).c_str(),
                         "-m", FSRF::mode_str(mode), 
                         "-v", (char*) NULL);
             }
             else 
             {
-                execl("/home/centos/fsrf/md5.out", "/home/centos/fsrf/md5.out",
+                execl("/home/centos/fsrf/pagerank.out", "/home/centos/fsrf/pagerank.out",
                         "-a", std::to_string(i).c_str(),
                         "-m", FSRF::mode_str(mode), (char*) NULL);
             }

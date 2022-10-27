@@ -10,10 +10,10 @@ using namespace std::chrono;
 int main(int argc, char *argv[])
 {
     ArgParse argsparse(argc, argv);
-    bool debug = argsparse.getVerbose();
     FSRF::MODE mode = argsparse.getMode();
+    bool debug = argsparse.getVerbose();
 
-    FSRF fsrf{argsparse.getAppId(), mode};
+    FSRF fsrf{argsparse.getAppId(), mode, debug};
     void *buf;
 
     uint64_t size = 0x4000;

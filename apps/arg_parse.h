@@ -1,6 +1,7 @@
 #pragma once
 #include <assert.h>
 #include <getopt.h>
+#include <iostream>
 #include "fsrf.h"
 
 class ArgParse

@@ -5,7 +5,7 @@
 #include "fsrf.h"
 
 #define DBG(x) \
-    if (debug) \
+    if (fsrf->debug) \
     std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
 #define ERR(x)                                                                          \
     {                                                                                   \
@@ -16,10 +16,17 @@
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
 
-FSRF::FSRF(uint64_t app_id, MODE mode) : mode(mode),
-                                         fpga(0, app_id),
-                                         app_id(app_id)
+FSRF::FSRF(uint64_t app_id, MODE mode, bool debug) : debug(debug),
+                                                     mode(mode),
+                                                     fpga(0, app_id),
+                                                     app_id(app_id)
 {
+    if (fsrf != nullptr)
+    {
+        ERR("Global fsrf object already initialized");
+    }
+    fsrf = this;
+
     if(app_id > 3)
         ERR("app_id must be in range [0, 3]\nGiven: " << app_id);
     if(mode == FSRF::MODE::NONE)
@@ -27,12 +34,6 @@ FSRF::FSRF(uint64_t app_id, MODE mode) : mode(mode),
     DBG("app_id: " << app_id);
     DBG("mode: " << mode_str(mode));
 
-    if (fsrf != nullptr)
-    {
-        ERR("Global fsrf object already initialized");
-    }
-
-    fsrf = this;
     faultHandlerThread = std::thread(&FSRF::device_fault_listener, this);
 
     fpga.write_sys_reg(app_id, 0x10, 1);       // enable tlb
