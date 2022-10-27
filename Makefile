@@ -24,6 +24,7 @@ md5:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -o md5.out
 multi_md5:
 	@sudo fpga-load-local-image -D -S 0 -I agfi-0a9192afc18f97549
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/md5.cpp -o md5.out
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/multi_md5.cpp -o multi_md5.out
 aes:
 	@sudo fpga-load-local-image -D -S 0 -I agfi-0057779ad2eb6dae4

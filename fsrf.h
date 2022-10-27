@@ -42,7 +42,7 @@ public:
     void fsrf_free(uint64_t* addr);
 
 private:
-    const static bool debug = true;
+    const static bool debug = false;
     bool abort = false;
     MODE mode;
     const char *mode_str[3] = {"Invalidate on read", "Invalidate on write", "MMAP"};

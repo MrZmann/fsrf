@@ -21,7 +21,7 @@ FSRF::FSRF(uint64_t app_id, MODE mode) : mode(mode),
                                          app_id(app_id)
 {
     if(app_id > 3)
-        ERR("app_id must be in range [0, 3]");
+        ERR("app_id must be in range [0, 3]\nGiven: " << app_id);
     if(mode == FSRF::MODE::NONE)
         ERR("Mode must not be none");
     DBG("app_id: " << app_id);

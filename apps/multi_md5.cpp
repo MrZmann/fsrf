@@ -1,9 +1,10 @@
 #include <assert.h>
 #include <errno.h>
 #include <iostream>
+#include <sys/wait.h>
+
 #include "fsrf.h"
 
-#include "arg_parse.h"
 #ifdef min
 #undef min
 #endif
@@ -11,68 +12,34 @@ using namespace std::chrono;
 
 int main(int argc, char *argv[])
 {
-    ArgParse argsparse(argc, argv);
-    bool debug = argsparse.getVerbose();
-    FSRF::MODE mode = argsparse.getMode();
+    pid_t pid; 
 
-    FSRF fsrf[4] = { {0, mode}, {1, mode}, {2, mode}, {3, mode} };
-    uint64_t size = 0x4000;
-    void *buf[4];
-
-    switch (mode)
-    {
-    case FSRF::MODE::INV_READ:
-    case FSRF::MODE::INV_WRITE:
-        for (int i = 0; i < 4; i++)
-            buf[i] = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        break;
-    case FSRF::MODE::MMAP:
-        for (int i = 0; i < 4; i++)
-            buf[i] = fsrf[i].fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
-        break;
-    default:
-        std::cerr << "unexpected mode\n";
-        exit(1);
-    }
-
-    if (buf == MAP_FAILED)
-        printf("Oh dear, something went wrong with allocation: \n\t%s\n", strerror(errno));
-
-    for (int i = 0; i < 4; i++)
-    {
-        fsrf[i].cntrlreg_write(0x10, (uint64_t)buf[i]); // src_addr
-        fsrf[i].cntrlreg_write(0x18, 8);             // rd_credits
-        fsrf[i].cntrlreg_write(0x20, size / 64);     // num 64 byte words
-    }
-
-    if (debug)
-        std::cout << "successfully wrote cntrlregs\n";
-
-    uint64_t val = 0;
-    while (val != size / 64)
-    {
-        val = fsrf[0].cntrlreg_read(0x28);
-        val = std::min(val, fsrf[1].cntrlreg_read(0x28));
-        val = std::min(val, fsrf[2].cntrlreg_read(0x28));
-        val = std::min(val, fsrf[3].cntrlreg_read(0x28));
-    }
-    if (debug)
-        std::cout << "\nfpga is done\n";
-
-    if (debug)
-    {
-        for (int i = 0; i < 4; i++)
-        {
-            val = fsrf[i].cntrlreg_read(0x0);
-            std::cout << "ab: " << val << "\n";
-            val = fsrf[i].cntrlreg_read(0x8);
-            std::cout << "cd: " << val << "\n";
+    for(int i = 0; i < 4; i++){
+        pid = fork();
+        if(pid == -1){
+            std::cerr << "Fork failed\n";
+            exit(1);
+        } else if(pid == 0) {
+            std::cout <<"making child\n";
+            execl("/home/centos/fsrf/md5.out", "/home/centos/fsrf/md5.out",
+                    "-a", std::to_string(i).c_str(),
+                    "-m", "inv_read", 
+                    "-v", (char*) NULL);
+            std::cerr << "exec returned!\n";
+            std::cout << "Oh dear, something went wrong with execl()! " << strerror(errno) << "\n";    
+            exit(1);
         }
     }
-    // end runs
-    // important -> polls on completion register
-    // util.finish_runs(aos, end, 0x28, true, configs[0].num_words);
-    // important -> answer lives in cntrlreg_read 0x0, 0x8
+
+
+    int done = 0;
+    while (done != 4) {
+        int status;
+        wait(&status);
+        int s = WEXITSTATUS(status);
+        if(s != 0) std::cerr << "Nonzero exit status: " << s << "\n";
+        done += 1;
+    }
 
     return 0;
 }
