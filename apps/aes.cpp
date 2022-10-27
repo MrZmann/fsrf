@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
     void *src;
     void *dest;
 
-    int size = 0x4000;
+    int size = 0x2000;
     switch (mode)
     {
     case FSRF::MODE::INV_READ:

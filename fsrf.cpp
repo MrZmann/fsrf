@@ -345,14 +345,20 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
 void FSRF::device_fault_listener()
 {
     DBG("Starting up");
+    int wait_count = 0x2;
     while (true)
     {
-        if (abort)
-            return;
 
         uint64_t fault = read_tlb_fault();
-        if (!(fault & 1) || fault == (uint64_t)-1)
+        if (!(fault & 1) || fault == (uint64_t)-1){
+            if (abort)
+            {
+                wait_count -= 1;
+                if(wait_count == 0)
+                    return;
+            }
             continue;
+        }
         DBG("Found fault");
 
         bool read = fault & 0x2;

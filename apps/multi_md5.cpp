@@ -4,6 +4,9 @@
 #include "fsrf.h"
 
 #include "arg_parse.h"
+#ifdef min
+#undef min
+#endif
 using namespace std::chrono;
 
 int main(int argc, char *argv[])
@@ -12,12 +15,7 @@ int main(int argc, char *argv[])
     bool debug = argsparse.getVerbose();
     FSRF::MODE mode = argsparse.getMode();
 
-    FSRF fsrf[4];
-    for (int i = 0; i < 4; i++)
-    {
-        fsrf[i] = FSRF{i, mode};
-    }
-
+    FSRF fsrf[4] = { {0, mode}, {1, mode}, {2, mode}, {3, mode} };
     uint64_t size = 0x4000;
     void *buf[4];
 
@@ -30,7 +28,7 @@ int main(int argc, char *argv[])
         break;
     case FSRF::MODE::MMAP:
         for (int i = 0; i < 4; i++)
-            buf[i] = fsrf.fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+            buf[i] = fsrf[i].fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
         break;
     default:
         std::cerr << "unexpected mode\n";
@@ -42,7 +40,7 @@ int main(int argc, char *argv[])
 
     for (int i = 0; i < 4; i++)
     {
-        fsrf[i].cntrlreg_write(0x10, (uint64_t)buf); // src_addr
+        fsrf[i].cntrlreg_write(0x10, (uint64_t)buf[i]); // src_addr
         fsrf[i].cntrlreg_write(0x18, 8);             // rd_credits
         fsrf[i].cntrlreg_write(0x20, size / 64);     // num 64 byte words
     }
