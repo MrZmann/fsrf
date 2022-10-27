@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sys/wait.h>
 
+#include "arg_parse.h"
 #include "fsrf.h"
 
 #ifdef min
@@ -12,6 +13,10 @@ using namespace std::chrono;
 
 int main(int argc, char *argv[])
 {
+    ArgParse argsparse(argc, argv, false);
+    bool debug = argsparse.getVerbose();
+    FSRF::MODE mode = argsparse.getMode();
+
     pid_t pid; 
 
     for(int i = 0; i < 4; i++){
@@ -20,10 +25,10 @@ int main(int argc, char *argv[])
             std::cerr << "Fork failed\n";
             exit(1);
         } else if(pid == 0) {
-            std::cout <<"making child\n";
+            std::cout <<"making child with mode: " << FSRF::mode_str(mode) << "\n";
             execl("/home/centos/fsrf/md5.out", "/home/centos/fsrf/md5.out",
                     "-a", std::to_string(i).c_str(),
-                    "-m", "inv_read", 
+                    "-m", FSRF::mode_str(mode), 
                     "-v", (char*) NULL);
             std::cerr << "exec returned!\n";
             std::cout << "Oh dear, something went wrong with execl()! " << strerror(errno) << "\n";    

@@ -1,9 +1,10 @@
 #include <assert.h>
 #include <errno.h>
 #include <iostream>
-#include "fsrf.h"
 
 #include "arg_parse.h"
+#include "fsrf.h"
+
 using namespace std::chrono;
 
 int main(int argc, char *argv[])

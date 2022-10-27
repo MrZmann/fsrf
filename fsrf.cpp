@@ -25,7 +25,7 @@ FSRF::FSRF(uint64_t app_id, MODE mode) : mode(mode),
     if(mode == FSRF::MODE::NONE)
         ERR("Mode must not be none");
     DBG("app_id: " << app_id);
-    DBG("mode: " << mode_str[mode]);
+    DBG("mode: " << mode_str(mode));
 
     if (fsrf != nullptr)
     {
@@ -61,6 +61,12 @@ FSRF::~FSRF()
 {
     abort = true;
     faultHandlerThread.join();
+}
+
+const char* FSRF::mode_str(MODE mode)
+{
+    constexpr const char* mode_string[3] = {"inv_read", "inv_write", "mmap"};
+    return mode_string[mode];
 }
 
 void FSRF::cntrlreg_write(uint64_t addr, uint64_t value)

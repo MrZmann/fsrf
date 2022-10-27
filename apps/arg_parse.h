@@ -1,4 +1,5 @@
 #pragma once
+#include <assert.h>
 #include <getopt.h>
 #include "fsrf.h"
 
@@ -6,10 +7,11 @@ class ArgParse
 {
     FSRF::MODE mode;
     int verbose;
+    bool need_app_id;
     uint64_t app_id;
 
 public:
-    ArgParse(int argc, char **argv) : mode(FSRF::MODE::NONE), verbose(false), app_id(~0L)
+    ArgParse(int argc, char **argv, bool need_app_id=true) : mode(FSRF::MODE::NONE), verbose(false), need_app_id(need_app_id), app_id(~0L)
     {
         read_args(argc, argv);
     }
@@ -26,6 +28,7 @@ public:
 
     uint64_t getAppId()
     {
+        assert(need_app_id);
         return app_id;
     }
 
@@ -67,7 +70,7 @@ private:
                 break;
             }
         }
-        if (app_id > 3)
+        if (app_id > 3 && need_app_id)
         {
             std::cerr << "App id (-a) must be in range [0,3]\n";
             exit(1);

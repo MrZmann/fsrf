@@ -23,8 +23,11 @@ public:
         MMAP = 2
     };
 
+
     FSRF(uint64_t app_id, MODE mode);
     ~FSRF();
+
+    static const char* mode_str(MODE mode);
 
     void cntrlreg_write(uint64_t addr, uint64_t value);
     uint64_t cntrlreg_read(uint64_t addr);
@@ -45,7 +48,6 @@ private:
     const static bool debug = false;
     bool abort = false;
     MODE mode;
-    const char *mode_str[3] = {"Invalidate on read", "Invalidate on write", "MMAP"};
 
     // device paging
     std::unordered_map<uint64_t, uint64_t>
@@ -99,3 +101,4 @@ private:
 
     static void handle_host_fault(int sig, siginfo_t *info, void *ucontext);
 };
+
