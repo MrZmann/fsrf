@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "arg_parse.h"
 #include "fsrf.h"
 
@@ -28,6 +30,7 @@ int main(int argc, char *argv[]) {
 	uint64_t length0 = 10;
 	uint64_t length1 = 11;
 	
+    config configs[4];
 	configs[0].s0_words = 1 << length0;
 	configs[0].s1_words = 1 << length1;
 	configs[0].s1_credit = 256;
@@ -35,24 +38,52 @@ int main(int argc, char *argv[]) {
 	configs[0].sc_words = (configs[0].sc_count+sc_ratio-1) / sc_ratio;
 	
 	
-    int flags = populate ? MAP_POPULATE : 0;
+    int flags = MAP_PRIVATE | MAP_ANONYMOUS;
     uint64_t offset = 0;
     
     length0 = configs[0].s0_words * 64;
 
-    void* addr = mmap(0, length0, PROT_READ, flags, fd[app], offset);
+    void* addr;
+
+    if(mode == FSRF::MODE::MMAP)
+    {
+        addr = fsrf.fsrf_malloc(length0, PROT_READ, flags);
+    }
+    else
+    {
+        addr = mmap(0, length0, PROT_READ, flags, -1, 0);
+        if(addr == MAP_FAILED) { std::cerr << "Map failed\n"; exit(1); }
+    }
     configs[app].s0_addr = (uint64_t)addr;
     offset += length0;
 
     length1 = configs[0].s1_words * 64;
     
-    addr = mmap(0, length1, PROT_READ, flags, fd[app], offset);
+    if(mode == FSRF::MODE::MMAP)
+    {
+        addr = fsrf.fsrf_malloc(length1, PROT_READ, flags);
+    }
+    else
+    {
+        addr = mmap(0, length1, PROT_READ, flags, -1, 0);
+        if(addr == MAP_FAILED) { std::cerr << "Map failed\n"; exit(1); }
+    }
+
     configs[app].s1_addr = (uint64_t)addr;
     offset += length1;
 
     length1 = configs[0].sc_words * 64;
 
-    addr = mmap(0, length1, PROT_WRITE, flags, fd[app], offset);
+    if(mode == FSRF::MODE::MMAP)
+    {
+        addr = fsrf.fsrf_malloc(length1, PROT_WRITE, flags);
+    }
+    else
+    {
+        addr = mmap(0, length1, PROT_WRITE, flags, -1, 0);
+        if(addr == MAP_FAILED) { std::cerr << "Map failed\n"; exit(1); }
+    }
+
     configs[app].sc_addr = (uint64_t)addr;
 	
     fsrf.cntrlreg_write(0x00, configs[app].s0_addr);

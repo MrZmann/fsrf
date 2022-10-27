@@ -33,6 +33,10 @@ multi_md5:
 nw:
 	@sudo fpga-load-local-image -D -S 0 -I agfi-0383241d22f62a36b
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/nw.cpp -o nw.out
+multi_nw:
+	@sudo fpga-load-local-image -D -S 0 -I agfi-0383241d22f62a36b
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/nw.cpp -o nw.out
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/multi_nw.cpp -o multi_nw.out
 aes:
 	@sudo fpga-load-local-image -D -S 0 -I agfi-0057779ad2eb6dae4
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/aes.cpp -o aes.out
