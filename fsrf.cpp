@@ -4,7 +4,7 @@
 
 #include "fsrf.h"
 
-#define DBG(x) \
+#define DBG(x)       \
     if (fsrf->debug) \
     std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
 #define ERR(x)                                                                          \
@@ -27,9 +27,9 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug) : debug(debug),
     }
     fsrf = this;
 
-    if(app_id > 3)
+    if (app_id > 3)
         ERR("app_id must be in range [0, 3]\nGiven: " << app_id);
-    if(mode == FSRF::MODE::NONE)
+    if (mode == FSRF::MODE::NONE)
         ERR("Mode must not be none");
     DBG("app_id: " << app_id);
     DBG("mode: " << mode_str(mode));
@@ -53,8 +53,6 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug) : debug(debug),
     phys_base = (128 << 20) + addrs[app_id];
     phys_bound = addrs[app_id] + (16 << 20) / max_apps;
 
-
-
     flush_tlb();
 }
 
@@ -64,9 +62,9 @@ FSRF::~FSRF()
     faultHandlerThread.join();
 }
 
-const char* FSRF::mode_str(MODE mode)
+const char *FSRF::mode_str(MODE mode)
 {
-    constexpr const char* mode_string[3] = {"inv_read", "inv_write", "mmap"};
+    constexpr const char *mode_string[3] = {"inv_read", "inv_write", "mmap"};
     return mode_string[mode];
 }
 
@@ -147,7 +145,6 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
     }
 }
 
-
 void FSRF::fsrf_free(uint64_t *addr)
 {
     assert(mode == MMAP);
@@ -155,7 +152,7 @@ void FSRF::fsrf_free(uint64_t *addr)
     while (it != vmes.end())
     {
         VME vme = it->second;
-        if ((uint64_t) addr >= vme.addr && (uint64_t) addr < (vme.addr + vme.size))
+        if ((uint64_t)addr >= vme.addr && (uint64_t)addr < (vme.addr + vme.size))
         {
             // unmap from addr to addr + size
             // if the user wanted this data written to host, they should have called msync.
@@ -253,7 +250,7 @@ void FSRF::write_tlb(uint64_t vpn,
 
     uint64_t tlb_addr = dram_tlb_addr(vpn);
     uint64_t entry = (vpn << 28) | (ppn << 4) | (writeable << 2) | (readable << 1) | present;
-    DBG("Entry " << (void*) entry);
+    DBG("Entry " << (void *)entry);
 
     fpga.write_mem_reg(tlb_addr, entry);
 }
@@ -288,23 +285,80 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     // TODO: check return value
     mprotect((void *)vaddr, bytes, PROT_READ);
 
-    uint64_t device_ppn;
-    if (mode == MODE::INV_READ ||
-        // If we are invalidating on write, we need to check if a page is already on the device
-        (mode == MODE::INV_WRITE && device_vpn_to_ppn.find(vpn) == device_vpn_to_ppn.end()))
+    if (mode == MODE::INV_READ)
     {
-        device_ppn = allocate_device_ppn();
+        // find a place to put the data
+        uint64_t device_ppn = allocate_device_ppn();
+        // put the data there
         fpga.dma_write((void *)vaddr, device_ppn << 12, bytes);
+        // remember where we put it
+        device_vpn_to_ppn[vpn] = device_ppn;
 
-        DBG("Finished dma write");
+        // make it inaccessible on the host
+        mprotect((void *)vaddr, bytes, PROT_NONE);
+
+        // create a tlb entry
+        write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
+
+        // respond to the fault
+        respond_tlb(device_ppn, true);
     }
     else if (mode == MODE::INV_WRITE)
     {
-        // the data already exists readonly on the host, so no dma necessary
-        device_ppn = device_vpn_to_ppn[vpn];
+        // If we are reading, we need to make it readable on the host and device
+        if (read)
+        {
+            // it is already readonly on the host at this point
+
+            // find a place to put the data
+            uint64_t device_ppn = allocate_device_ppn();
+            // put the data there
+            fpga.dma_write((void *)vaddr, device_ppn << 12, bytes);
+            // remember where we put it
+            device_vpn_to_ppn[vpn] = device_ppn;
+
+            // create a tlb entry
+            write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
+
+            // respond to the fault
+            respond_tlb(device_ppn, true);
+        }
+        // if it's a write, there are two cases.
+        // either the page is already readable on the device, or this is a blind write.
+        else
+        {
+            // the page is already on the device, we just need to invalidate it on the host
+            // and make it writeable on the device
+            if (device_vpn_to_ppn.find(vpn) == device_vpn_to_ppn.end())
+            {
+                mprotect((void *)vaddr, bytes, PROT_NONE);
+                write_tlb(vpn, device_vpn_to_ppn[vpn], /*writeable*/ true, true, true, false);
+                respond_tlb(device_vpn_to_ppn[vpn], true);
+            }
+            // we need to allocate a page on the device. invalidate on host. RW on device
+            else
+            {
+                // find a place to put the data
+                uint64_t device_ppn = allocate_device_ppn();
+                // put the data there
+                fpga.dma_write((void *)vaddr, device_ppn << 12, bytes);
+                // remember where we put it
+                device_vpn_to_ppn[vpn] = device_ppn;
+
+                // create a tlb entry
+                write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
+
+                // invalidate on host
+                mprotect((void *)vaddr, bytes, PROT_NONE);
+
+                // respond to the fault
+                respond_tlb(device_ppn, true);
+            }
+        }
     }
     else
     {
+        assert(mode == MODE::MMAP);
         bool valid_addr = false;
         for (auto it = vmes.begin(); it != vmes.end(); ++it)
         {
@@ -321,26 +375,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         }
         if (!valid_addr)
             ERR("Invalid device access");
-    }
 
-    DBG("Device ppn: " << device_ppn);
-    device_vpn_to_ppn[vpn] = device_ppn;
-
-    if (mode == MODE::INV_READ || (mode == MODE::INV_WRITE && !read)) 
-    {
-        mprotect((void *)vaddr, bytes, PROT_NONE);
-        write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
-        respond_tlb(device_ppn, true);
-    
-    }
-    else if (mode == MODE::INV_WRITE && read)
-    {
-        mprotect((void *)vaddr, bytes, PROT_READ);
-        write_tlb(vpn, device_ppn, /*writeable*/ false, true, true, false);
-        respond_tlb(device_ppn, true);
-    }
-    else
-    {
         // both host and device can read / write
         // TODO actually use VME permissions
         mprotect((void *)vaddr, bytes, PROT_READ | PROT_WRITE);
@@ -357,8 +392,9 @@ void FSRF::device_fault_listener()
 
         uint64_t fault = read_tlb_fault();
 
-        assert(fault != (uint64_t) -1);
-        if (!(fault & 1)){
+        assert(fault != (uint64_t)-1);
+        if (!(fault & 1))
+        {
             uint64_t num_credits = fault >> 57;
             if (abort && num_credits == 0)
                 return;
@@ -367,15 +403,18 @@ void FSRF::device_fault_listener()
         DBG("Found fault");
 
         bool read = fault & 0x2;
-        if(read) {
+        if (read)
+        {
             DBG("Device tried to read");
-        } else {
+        }
+        else
+        {
             DBG("Device tried to write");
         }
 
         uint64_t vpn = (fault >> 2) & 0xFFFFFFFFFFFFF;
 
-        DBG("vpn: " << (void*) vpn);
+        DBG("vpn: " << (void *)vpn);
 
         handle_device_fault(read, vpn);
     }
