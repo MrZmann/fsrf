@@ -19,6 +19,7 @@ FSRF *fsrf = nullptr;
 FSRF::FSRF(uint64_t app_id, MODE mode, bool debug) : debug(debug),
                                                      mode(mode),
                                                      fpga(0, app_id),
+                                                     lock(),
                                                      app_id(app_id)
 {
     if (fsrf != nullptr)
@@ -82,9 +83,10 @@ uint64_t FSRF::cntrlreg_read(uint64_t addr)
 
 void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t device_permissions)
 {
+    const std::lock_guard<std::mutex> guard(lock);
+
     assert(mode == MMAP);
     void *res = mmap(0, length, host_permissions, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    DBG("hola");
     if (res == MAP_FAILED)
     {
         DBG("mmap failed");
@@ -104,6 +106,7 @@ void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t dev
 void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
 {
     assert(mode == MMAP);
+    const std::lock_guard<std::mutex> guard(lock);
     uint64_t low = (uint64_t)addr;
     uint64_t high = low + (uint64_t)length;
     auto it = vmes.begin();
@@ -281,8 +284,10 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
 
     DBG("Handling device fault at: " << (uint64_t *)vaddr);
 
-    // TODO: Lock so that only device or host fault handler can race
-    // TODO: check return value
+    // make sure the host fault handler isn't messing with my data structures
+    // at the same time
+    const std::lock_guard<std::mutex> guard(lock);
+
     mprotect((void *)vaddr, bytes, PROT_READ);
 
     if (mode == MODE::INV_READ)
@@ -359,6 +364,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     else
     {
         assert(mode == MODE::MMAP);
+        uint64_t device_ppn = -1;
         bool valid_addr = false;
         for (auto it = vmes.begin(); it != vmes.end(); ++it)
         {
@@ -376,9 +382,13 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         if (!valid_addr)
             ERR("Invalid device access");
 
+        // remember where we put it
+        device_vpn_to_ppn[vpn] = device_ppn;
+
         // both host and device can read / write
         // TODO actually use VME permissions
-        mprotect((void *)vaddr, bytes, PROT_READ | PROT_WRITE);
+        int res = mprotect((void *)vaddr, bytes, PROT_READ | PROT_WRITE);
+        if(res) { ERR("mprotect failed"); }
         write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
         respond_tlb(device_ppn, true);
     }
@@ -430,6 +440,8 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
     uint64_t vpn = missAddress >> 12;
 
     DBG("Host trying to access address: " << info->si_addr);
+
+    const std::lock_guard<std::mutex> guard(fsrf->lock);
 
     // if this page is on the device
     if (fsrf->device_vpn_to_ppn.find(vpn) != fsrf->device_vpn_to_ppn.end())

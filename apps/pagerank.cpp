@@ -30,10 +30,21 @@ int main(int argc, char *argv[]) {
     int fd = open("/home/centos/fsrf/inputs/webbase-1M/webbase-1M.bin", O_RDWR);
     assert(fd != -1);
 
-    configs[app].read_ptr = mmap(0, read_length, PROT_READ, MAP_SHARED, fd, 0);
-    // limitation - transparent version doesn't know when to copy back to host
-    // to save changes to file
-    configs[app].write_ptr = mmap(0, write_length, PROT_WRITE, MAP_PRIVATE, fd, read_length);
+    if (mode == FSRF::MODE::INV_READ || mode == FSRF::MODE::INV_WRITE){
+        configs[app].read_ptr = mmap(0, read_length, PROT_READ, MAP_SHARED, fd, 0);
+        // limitation - transparent version doesn't know when to copy back to host
+        // to save changes to file
+        // configs[app].write_ptr = mmap(0, write_length, PROT_WRITE, MAP_PRIVATE, fd, read_length);
+        configs[app].write_ptr = mmap(0, write_length, PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    } else {
+        configs[app].read_ptr = fsrf.fsrf_malloc(read_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+        int length = read(fd, configs[app].read_ptr, read_length);
+        if (length != read_length) {
+            std::cerr << "Problem reading\n";
+            exit(1);
+        }
+        configs[app].write_ptr = fsrf.fsrf_malloc(write_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+    }
 
     assert(configs[app].read_ptr != MAP_FAILED);
     assert(configs[app].write_ptr != MAP_FAILED);

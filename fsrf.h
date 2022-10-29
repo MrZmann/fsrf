@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <mutex>  
 #include <set>
 #include <signal.h>
 #include <stdint.h>
@@ -58,6 +59,8 @@ private:
 
     // device
     FPGA fpga;
+
+    std::mutex lock;
 
     // host info
     std::thread faultHandlerThread;
