@@ -20,12 +20,12 @@ int main(int argc, char *argv[]) {
 
     FSRF fsrf{app, mode, debug};
 	config configs[4];
-	
-	configs[0].num_verts = 1000448;
-	configs[0].num_edges = 3105792;
+
+	configs[app].num_verts = 1000448;
+	configs[app].num_edges = 3105792;
 	uint64_t read_length, write_length;
-	read_length = configs[0].num_verts*(16+8) + configs[0].num_edges*8;
-	write_length = configs[0].num_verts*8;
+	read_length = configs[app].num_verts*(16+8) + configs[app].num_edges*8;
+	write_length = configs[app].num_verts*8;
 	
     int fd = open("/home/centos/fsrf/inputs/webbase-1M/webbase-1M.bin", O_RDWR);
     assert(fd != -1);
@@ -35,10 +35,10 @@ int main(int argc, char *argv[]) {
         // limitation - transparent version doesn't know when to copy back to host
         // to save changes to file
         // configs[app].write_ptr = mmap(0, write_length, PROT_WRITE, MAP_PRIVATE, fd, read_length);
-        configs[app].write_ptr = mmap(0, write_length, PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        configs[app].write_ptr = mmap(0, write_length, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     } else {
         configs[app].read_ptr = fsrf.fsrf_malloc(read_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
-        int length = read(fd, configs[app].read_ptr, read_length);
+        uint32_t length = read(fd, configs[app].read_ptr, read_length);
         if (length != read_length) {
             std::cerr << "Problem reading\n";
             exit(1);
@@ -50,8 +50,8 @@ int main(int argc, char *argv[]) {
     assert(configs[app].write_ptr != MAP_FAILED);
 
     configs[app].vert_ptr = (uint64_t)configs[app].read_ptr;
-    configs[app].edge_ptr = configs[app].vert_ptr + configs[0].num_verts*16;
-    configs[app].input_ptr = configs[app].edge_ptr + configs[0].num_edges*8;
+    configs[app].edge_ptr = configs[app].vert_ptr + configs[app].num_verts*16;
+    configs[app].input_ptr = configs[app].edge_ptr + configs[app].num_edges*8;
     configs[app].output_ptr = (uint64_t)configs[app].write_ptr;
 
 	// start runs
@@ -72,7 +72,30 @@ int main(int argc, char *argv[]) {
 
     // end run
 	fsrf.cntrlreg_write(0x00, 0x10);
-	
+
+    uint64_t num_credits = 1;
+
+    while(num_credits) {
+        std::cout << "waiting\n";
+        uint64_t fault = fsrf.read_tlb_fault();
+        num_credits = fault >> 57;
+    }
+
+    // bring output data back to host
+    uint32_t* input = (uint32_t*) configs[app].read_ptr;
+    uint32_t* output = (uint32_t*) configs[app].write_ptr;
+    uint32_t input_sum = 0;
+    uint32_t output_sum = 0;
+
+    for(uint32_t i = 0; i < read_length / sizeof(uint32_t); i += 0x1000/sizeof(uint32_t)){
+        input_sum += input[i];
+    }
+
+    for(uint32_t i = 0; i < write_length / sizeof(uint32_t); i += 0x1000/sizeof(uint32_t)){
+        output_sum += output[i];
+    }
+    if(debug) std::cout << "in sum: " << input_sum << "\n";
+    if(debug) std::cout << "out sum: " << output_sum << "\n";
 	return 0;
 }
 

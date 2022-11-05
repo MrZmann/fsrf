@@ -325,7 +325,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
             device_vpn_to_ppn[vpn] = device_ppn;
 
             // create a tlb entry
-            write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
+            write_tlb(vpn, device_ppn, /*writeable*/ false, true, true, false);
 
             // respond to the fault
             respond_tlb(device_ppn, true);
@@ -336,7 +336,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         {
             // the page is already on the device, we just need to invalidate it on the host
             // and make it writeable on the device
-            if (device_vpn_to_ppn.find(vpn) == device_vpn_to_ppn.end())
+            if (device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end())
             {
                 mprotect((void *)vaddr, bytes, PROT_NONE);
                 write_tlb(vpn, device_vpn_to_ppn[vpn], /*writeable*/ true, true, true, false);
