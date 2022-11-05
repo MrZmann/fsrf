@@ -45,7 +45,7 @@ public:
 
     void fsrf_free(uint64_t* addr);
 
-public:
+private:
     bool debug;
     bool abort = false;
     MODE mode;
