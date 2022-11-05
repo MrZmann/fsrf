@@ -9,7 +9,9 @@ method dma_read(vpn : int,
     returns (new_host_mem : map<int, page>, new_host_tlb : map<int, tlb_entry>)
 
     // There must be a tlb entry and ppn dedicated on the host
+    // Our DMA transfer method also requires the vpn to be writeable
     requires vpn in host_tlb
+    requires host_tlb[vpn].writable
 
     // If we are reading from the device, there should be data there
     requires vpn in device_tlb
@@ -116,7 +118,9 @@ method read_host(vpn : int,
 
     if vpn !in host_tlb || !host_tlb[vpn].present {
         new_device_tlb := write_tlb(vpn, 0, false, false, false, device_tlb);
-        new_host_mem, new_host_tlb := dma_read(vpn, host_mem, host_tlb, device_mem, device_tlb);
+        var curr_entry := host_tlb[vpn];
+        var writeable_host_tlb := host_tlb[vpn := tlb_entry.Node(true, true, true, curr_entry.ppn)];
+        new_host_mem, new_host_tlb := dma_read(vpn, host_mem, writeable_host_tlb, device_mem, device_tlb);
     }
 
     data := new_host_mem[new_host_tlb[vpn].ppn].data;
