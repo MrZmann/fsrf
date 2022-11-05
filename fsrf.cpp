@@ -288,10 +288,10 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     // at the same time
     const std::lock_guard<std::mutex> guard(lock);
 
-    mprotect((void *)vaddr, bytes, PROT_READ);
-
     if (mode == MODE::INV_READ)
     {
+        mprotect((void *)vaddr, bytes, PROT_READ);
+
         // find a place to put the data
         uint64_t device_ppn = allocate_device_ppn();
         // put the data there
@@ -310,6 +310,8 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     }
     else if (mode == MODE::INV_WRITE)
     {
+        mprotect((void *)vaddr, bytes, PROT_READ);
+
         // If we are reading, we need to make it readable on the host and device
         if (read)
         {
@@ -366,9 +368,10 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         assert(mode == MODE::MMAP);
         uint64_t device_ppn = -1;
         bool valid_addr = false;
+        VME vme;
         for (auto it = vmes.begin(); it != vmes.end(); ++it)
         {
-            VME vme = it->second;
+            vme = it->second;
             // This is a valid mmapped address
             if (vaddr >= vme.addr && vaddr < vme.addr + vme.size)
             {
@@ -388,7 +391,10 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         // both host and device can read / write
         // TODO actually use VME permissions
         int res = mprotect((void *)vaddr, bytes, PROT_READ | PROT_WRITE);
-        if(res) { ERR("mprotect failed"); }
+        if (res)
+        {
+            ERR("mprotect failed");
+        }
         write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
         respond_tlb(device_ppn, true);
     }
