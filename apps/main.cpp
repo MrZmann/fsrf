@@ -1,5 +1,4 @@
-#include <iostream>
-#include <stdio.h>
+#include "Aes.h"
 #include "Bench.h"
 
 int main(int argc, char *argv[])
@@ -11,4 +10,5 @@ int main(int argc, char *argv[])
     bench->start_fpga();
     bench->wait_for_fpga();
     bench->copy_back_output();
+    delete bench;
 }

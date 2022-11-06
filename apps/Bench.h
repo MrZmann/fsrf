@@ -1,14 +1,17 @@
+#pragma once 
 #include "arg_parse.h"
 #include "fsrf.h"
 
 class Bench
 {
+protected:
     FSRF *fsrf = nullptr;
     FSRF::MODE mode;
     int verbose;
     uint64_t app_id;
 
-    Bench(Argparse &argparse) : mode(FSRF::MODE::NONE), verbose(false), app_id(~0L)
+public:
+    Bench(ArgParse argparse) : mode(FSRF::MODE::NONE), verbose(false), app_id(~0L)
     {
         mode = argparse.getMode();
         verbose = argparse.getVerbose();
@@ -16,7 +19,7 @@ class Bench
         fsrf = new FSRF(app_id, mode, verbose);
     }
 
-    ~Bench()
+    virtual ~Bench()
     {
         delete fsrf;
     }
