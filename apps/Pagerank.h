@@ -96,7 +96,6 @@ public:
 
         if (mode == FSRF::MODE::MMAP)
         {
-            std::cout << "about to sync\n";
             fsrf->sync_device_to_host(output, write_length);
         }
 
