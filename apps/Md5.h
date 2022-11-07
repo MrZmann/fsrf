@@ -3,7 +3,7 @@
 
 class Md5 : public Bench
 {
-    const int size = 0x4000;
+    const uint64_t size = 0x4000;
     void *buf;
 
 public:
@@ -41,7 +41,7 @@ public:
         uint64_t val = 0;
         while (val != size / 64)
         {
-            val = fsrf.cntrlreg_read(0x28);
+            val = fsrf->cntrlreg_read(0x28);
         }
     }
 
@@ -49,9 +49,10 @@ public:
     {
         if (verbose)
         {
-            val = fsrf.cntrlreg_read(0x0);
+            uint64_t val = 0;
+            val = fsrf->cntrlreg_read(0x0);
             std::cout << "ab: " << val << "\n";
-            val = fsrf.cntrlreg_read(0x8);
+            val = fsrf->cntrlreg_read(0x8);
             std::cout << "cd: " << val << "\n";
         }
     }

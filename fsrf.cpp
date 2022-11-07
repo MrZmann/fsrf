@@ -118,10 +118,9 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
             (high > vme.addr && high < (vme.addr + vme.size)))
         {
             // unmap from addr to addr + size
-            // if the user wanted this data written to host, they should have called msync.
-            for (uint64_t vpn = vme.addr; vpn < vme.addr + vme.size; ++vpn)
+            for (uint64_t vaddr = vme.addr; vaddr < vme.addr + vme.size; vaddr += 0x1000)
             {
-                uint64_t vaddr = vpn << 12;
+                uint64_t vpn = vaddr >> 12;
                 // this page was never put on the device
                 if (device_vpn_to_ppn.find(vpn) == device_vpn_to_ppn.end())
                     continue;
@@ -159,8 +158,9 @@ void FSRF::fsrf_free(uint64_t *addr)
         {
             // unmap from addr to addr + size
             // if the user wanted this data written to host, they should have called msync.
-            for (uint64_t vpn = vme.addr; vpn < vme.addr + vme.size; ++vpn)
+            for (uint64_t vaddr = vme.addr; vaddr < vme.addr + vme.size; vaddr += 0x1000)
             {
+                uint64_t vpn = vaddr >> 12;
                 // this page was never put on the device
                 if (device_vpn_to_ppn.find(vpn) == device_vpn_to_ppn.end())
                     continue;

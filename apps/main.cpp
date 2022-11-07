@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
     ArgParse argsparse(argc, argv);
     Bench *bench;
 
-    char *benchmarkNames[] = [ "aes", "md5", "nw", "pagerank" ];
+    const char *benchmarkNames[] = {"aes", "md5", "nw", "pagerank"};
 
     if (strcmp(argsparse.getBenchmarkName(), benchmarkNames[0]) == 0)
     {
@@ -31,6 +31,7 @@ int main(int argc, char *argv[])
     else
     {
         std::cerr << "unsupported benchmark name\n";
+        exit(1);
     }
 
     bench->setup();

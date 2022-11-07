@@ -4,8 +4,8 @@
 class Pagerank : public Bench
 {
 
-    uint64_t num_verts;
-    uint64_t num_edges;
+    uint64_t num_verts = 1000448;
+    uint64_t num_edges = 3105792;
     uint64_t vert_ptr;
     uint64_t edge_ptr;
     uint64_t input_ptr;
@@ -13,8 +13,6 @@ class Pagerank : public Bench
     void *read_ptr;
     void *write_ptr;
 
-    num_verts = 1000448;
-    num_edges = 3105792;
     uint64_t read_length, write_length;
 
 public:
@@ -81,6 +79,7 @@ public:
 
     virtual void copy_back_output()
     {
+        /*
         uint64_t num_credits = 1;
 
         while (num_credits)
@@ -89,17 +88,19 @@ public:
             uint64_t fault = fsrf->read_tlb_fault();
             num_credits = fault >> 57;
         }
+        */
 
         // bring output data back to host
-        uint32_t *output = (uint32_t *)write_ptr;
-        uint32_t output_sum = 0;
+        uint64_t *output = (uint64_t *)write_ptr;
+        uint64_t output_sum = 0;
 
         if (mode == FSRF::MODE::MMAP)
         {
-            frsf.sync_device_to_host(write_ptr, write_length);
+            std::cout << "about to sync\n";
+            fsrf->sync_device_to_host(output, write_length);
         }
 
-        for (uint32_t i = 0; i < write_length / sizeof(uint32_t); i += 0x1000 / sizeof(uint32_t))
+        for (uint64_t i = 0; i < write_length / sizeof(uint64_t); i += 0x1000 / sizeof(uint64_t))
         {
             output_sum += output[i];
         }
