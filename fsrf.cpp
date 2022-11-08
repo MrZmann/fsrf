@@ -54,6 +54,7 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug) : debug(debug),
     phys_base = (128 << 20) + addrs[app_id];
     phys_bound = addrs[app_id] + (16 << 20) / max_apps;
 
+    next_free_page = phys_base >> 12;
     flush_tlb();
 }
 
@@ -182,33 +183,20 @@ void FSRF::fsrf_free(uint64_t *addr)
 
 uint64_t FSRF::allocate_device_ppn()
 {
-    uint64_t addr = phys_base;
+    uint64_t toReturn = next_free_page;
+    next_free_page += 1;
 
-    for (auto ppn : allocated_device_ppns)
+    if (next_free_page == phys_bound >> 12)
     {
-        // We can map this page!
-        if (ppn >= addr + PAGE_SIZE)
-            break;
-        else
-        {
-            addr += PAGE_SIZE;
-            if (addr == phys_bound)
-            {
-                ERR("Not enough free pages on FPGA");
-            }
-        }
+        ERR("Too many pages allocated");
     }
 
-    DBG("addr: " << addr);
-
-    allocated_device_ppns.insert(addr);
-
-    return addr >> 12;
+    return toReturn;
 }
 
 void FSRF::free_device_vpn(uint64_t vpn)
 {
-    allocated_device_ppns.erase(device_vpn_to_ppn[vpn]);
+    // allocated_device_ppns.erase(device_vpn_to_ppn[vpn]);
     device_vpn_to_ppn.erase(vpn);
 }
 

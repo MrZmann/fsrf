@@ -1,7 +1,7 @@
 #pragma once
 
 #include <map>
-#include <mutex>  
+#include <mutex>
 #include <set>
 #include <signal.h>
 #include <stdint.h>
@@ -24,11 +24,10 @@ public:
         MMAP = 2
     };
 
-
     FSRF(uint64_t app_id, MODE mode, bool debug);
     ~FSRF();
 
-    static const char* mode_str(MODE mode);
+    static const char *mode_str(MODE mode);
 
     void cntrlreg_write(uint64_t addr, uint64_t value);
     uint64_t cntrlreg_read(uint64_t addr);
@@ -43,7 +42,7 @@ public:
     void *fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t device_permissions);
     void sync_device_to_host(uint64_t *addr, size_t length);
 
-    void fsrf_free(uint64_t* addr);
+    void fsrf_free(uint64_t *addr);
 
 private:
     bool debug;
@@ -53,9 +52,9 @@ private:
     // device paging
     std::unordered_map<uint64_t, uint64_t>
         device_vpn_to_ppn;
-    std::set<uint64_t> allocated_device_ppns;
     uint64_t phys_base;  // lowest paddr for app_id
     uint64_t phys_bound; // highest paddr for app_id
+    uint64_t next_free_page;
 
     // device
     FPGA fpga;
@@ -104,4 +103,3 @@ private:
 
     static void handle_host_fault(int sig, siginfo_t *info, void *ucontext);
 };
-
