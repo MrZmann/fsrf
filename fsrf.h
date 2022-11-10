@@ -79,6 +79,8 @@ private:
 
     std::map<uint64_t, VME> vmes;
 
+    uint64_t mmap_dma_size;
+
     void
     respond_tlb(uint64_t ppn, uint64_t valid);
     uint64_t allocate_device_ppn();
