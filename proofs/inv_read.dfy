@@ -54,6 +54,7 @@ method write_tlb(vpn : int, ppn : int, present : bool, readable : bool, writable
     ensures forall p :: p in device_tlb ==> p in new_device_tlb
     ensures forall p :: p in device_tlb && p != vpn ==> device_tlb[p] == new_device_tlb[p]
 
+    // actual update takes place
     ensures vpn in new_device_tlb
     ensures new_device_tlb[vpn].present == present
     ensures new_device_tlb[vpn].readable == readable
@@ -62,6 +63,51 @@ method write_tlb(vpn : int, ppn : int, present : bool, readable : bool, writable
 
 {
     new_device_tlb := device_tlb[vpn := tlb_entry.Node(present, readable, writable, ppn)];
+}
+
+function vpn_present(vpn : int, tlb : map<int, tlb_entry>) : bool
+{
+    (vpn in tlb && tlb[vpn].present)
+}
+
+function ppn_present_and_readable_somewhere(vpn : int, host_mem : map<int, page>, host_tlb : map<int, tlb_entry>, device_mem : map<int, page>, device_tlb : map<int, tlb_entry>) : bool
+{
+    (vpn in host_tlb && host_tlb[vpn].present ==>
+        host_tlb[vpn].readable && 
+        host_tlb[vpn].ppn in host_mem) &&
+    (vpn in device_tlb && device_tlb[vpn].present ==>
+        device_tlb[vpn].readable && 
+        device_tlb[vpn].ppn in device_mem)
+}
+
+function ppn_readable(vpn : int, mem : map<int, page>, tlb : map<int, tlb_entry>) : bool
+{
+    vpn in tlb && tlb[vpn].present &&
+        tlb[vpn].readable && tlb[vpn].ppn in mem
+}
+
+function data_readable_on_host(data : int, vpn : int, host_mem : map<int, page>, host_tlb : map<int, tlb_entry>) : bool
+{
+    (vpn in host_tlb) &&
+    (host_tlb[vpn].present) &&
+    (host_tlb[vpn].ppn in host_mem) &&
+    (data == host_mem[host_tlb[vpn].ppn].data)
+}
+
+function data_and_permissions_unchanged(vpn : int, host_mem : map<int, page>, host_tlb : map<int, tlb_entry>, device_mem : map<int, page>, device_tlb : map<int, tlb_entry>, data : int, 
+            new_host_mem : map<int, page>, new_host_tlb : map<int, tlb_entry>, 
+            new_device_mem : map<int, page>, new_device_tlb : map<int, tlb_entry>) : bool
+            requires vpn in new_host_tlb
+{
+    // The actual data must be unchanged
+    (vpn in host_tlb && host_tlb[vpn].present ==> host_tlb[vpn].ppn in host_mem ==> data == host_mem[host_tlb[vpn].ppn].data) &&
+    (vpn in device_tlb && device_tlb[vpn].present ==> device_tlb[vpn].ppn in device_mem ==> data == device_mem[device_tlb[vpn].ppn].data) &&
+
+    // The permissions must be unchanged
+    (vpn in host_tlb && host_tlb[vpn].present ==> new_host_tlb[vpn].readable == host_tlb[vpn].readable) &&
+    (vpn in host_tlb && host_tlb[vpn].present ==> new_host_tlb[vpn].writable == host_tlb[vpn].writable) &&
+    (vpn in device_tlb && device_tlb[vpn].present ==> new_host_tlb[vpn].readable == device_tlb[vpn].readable) &&
+    (vpn in device_tlb && device_tlb[vpn].present ==> new_host_tlb[vpn].writable == device_tlb[vpn].writable)
 }
 
 // read from memory on the host
@@ -73,42 +119,23 @@ method read_host(vpn : int,
             new_host_mem : map<int, page>, new_host_tlb : map<int, tlb_entry>, 
             new_device_mem : map<int, page>, new_device_tlb : map<int, tlb_entry>)
 
-    // Even if the data isn't present on the host, we must already
-    // have a ppn for it
-    requires vpn in host_tlb;
-
-    // Data must exist and be readable somewhere
-    requires (vpn in host_tlb && host_tlb[vpn].present) || 
-            (vpn in device_tlb && device_tlb[vpn].present)
-    requires vpn in host_tlb && host_tlb[vpn].present ==>
-        host_tlb[vpn].readable && 
-        host_tlb[vpn].ppn in host_mem
-    requires vpn in device_tlb && device_tlb[vpn].present ==>
-        device_tlb[vpn].readable && 
-        device_tlb[vpn].ppn in device_mem
-
+    // data must exist on the host so that we have a ppn for it
+    requires vpn in host_tlb
+    // Data needs to be present somewhere
+    requires vpn_present(vpn, host_tlb) || vpn_present(vpn, device_tlb)
     // Data must not already exist on both the host and device
-    requires vpn in host_tlb && host_tlb[vpn].present ==> (vpn !in device_tlb || !device_tlb[vpn].present)
-    requires vpn in device_tlb && device_tlb[vpn].present ==> (vpn !in host_tlb || !host_tlb[vpn].present)
+    requires !(vpn_present(vpn, host_tlb) && vpn_present(vpn, device_tlb))
+
+    // Data must also exist and be readable somewhere
+    requires ppn_readable(vpn, host_mem, host_tlb) || ppn_readable(vpn, device_mem, device_tlb)
 
     // The data should reside on the host after executing this method
-    ensures vpn in new_host_tlb
-    ensures new_host_tlb[vpn].present
-    ensures new_host_tlb[vpn].ppn in new_host_mem
-    ensures data == new_host_mem[new_host_tlb[vpn].ppn].data
+    ensures ppn_readable(vpn, new_host_mem, new_host_tlb)
 
     // The data should not be accessible on the device after executing this method
-    ensures vpn !in new_device_tlb || !new_device_tlb[vpn].present
+    ensures !vpn_present(vpn, new_device_tlb)
 
-    // The actual data must be unchanged
-    ensures vpn in host_tlb && host_tlb[vpn].present ==> data == host_mem[host_tlb[vpn].ppn].data
-    ensures vpn in device_tlb && device_tlb[vpn].present ==> data == device_mem[device_tlb[vpn].ppn].data
-
-    // The permissions must be unchanged
-    ensures vpn in host_tlb && host_tlb[vpn].present ==> new_host_tlb[vpn].readable == host_tlb[vpn].readable
-    ensures vpn in host_tlb && host_tlb[vpn].present ==> new_host_tlb[vpn].writable == host_tlb[vpn].writable
-    ensures vpn in device_tlb && device_tlb[vpn].present ==> new_host_tlb[vpn].readable == device_tlb[vpn].readable
-    ensures vpn in device_tlb && device_tlb[vpn].present ==> new_host_tlb[vpn].writable == device_tlb[vpn].writable
+    ensures data_and_permissions_unchanged(vpn, host_mem, host_tlb, device_mem, device_tlb, data, new_host_mem, new_host_tlb, new_device_mem, new_device_tlb)
 {
     new_host_mem := host_mem;
     new_host_tlb := host_tlb;
