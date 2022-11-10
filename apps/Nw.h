@@ -7,8 +7,13 @@ class Nw : public Bench
     const uint64_t s_ratio = 512 / 128;
     const uint64_t sc_ratio = 512 / 8;
 
+    /*
     uint64_t length0 = 10;
     uint64_t length1 = 11;
+    */
+
+    uint64_t length0 = 13;
+    uint64_t length1 = 14;
 
     uint64_t s0_addr;
     uint64_t s0_words;

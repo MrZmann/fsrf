@@ -79,18 +79,6 @@ public:
 
     virtual void copy_back_output()
     {
-        /*
-        uint64_t num_credits = 1;
-
-        while (num_credits)
-        {
-            std::cout << "waiting\n";
-            uint64_t fault = fsrf->read_tlb_fault();
-            num_credits = fault >> 57;
-        }
-        */
-
-        // bring output data back to host
         uint64_t *output = (uint64_t *)write_ptr;
         uint64_t output_sum = 0;
 

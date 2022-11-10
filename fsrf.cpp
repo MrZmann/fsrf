@@ -19,6 +19,7 @@ FSRF *fsrf = nullptr;
 FSRF::FSRF(uint64_t app_id, MODE mode, bool debug) : debug(debug),
                                                      mode(mode),
                                                      fpga(0, app_id),
+                                                     num_credits(0),
                                                      lock(),
                                                      app_id(app_id)
 {
@@ -80,6 +81,11 @@ uint64_t FSRF::cntrlreg_read(uint64_t addr)
     uint64_t value;
     fpga.read_app_reg(app_id, addr, value);
     return value;
+}
+
+uint64_t FSRF::get_num_credits()
+{
+    return num_credits;
 }
 
 void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t device_permissions)
@@ -399,7 +405,7 @@ void FSRF::device_fault_listener()
         assert(fault != (uint64_t)-1);
         if (!(fault & 1))
         {
-            uint64_t num_credits = fault >> 57;
+            num_credits = fault >> 57;
             if (abort && num_credits == 0)
                 return;
             continue;

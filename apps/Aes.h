@@ -3,7 +3,7 @@
 
 class Aes : public Bench
 {
-    const int size = 0x2000;
+    const int size = 1073741824;
     void *src;
     void *dest;
 
@@ -25,6 +25,11 @@ public:
             break;
         default:
             std::cerr << "unexpected mode\n";
+            exit(1);
+        }
+
+        if(src == MAP_FAILED || dest == MAP_FAILED){
+            std::cerr << "allocation failed\n";
             exit(1);
         }
     }
@@ -52,10 +57,34 @@ public:
         {
             val = fsrf->cntrlreg_read(0x38);
         }
+        
+        uint64_t num_credits = 1;
+        
+        while (num_credits)
+        {
+            num_credits = fsrf->get_num_credits();
+            //std::cout << "Waiting " << num_credits << "\n";
+        }
     }
 
     virtual void copy_back_output()
     {
+           
+        uint64_t *output = (uint64_t *)dest;
+        uint64_t output_sum = 0;
+
+        if (mode == FSRF::MODE::MMAP)
+        {
+            fsrf->sync_device_to_host(output, size);
+        }
+
+        for (uint64_t i = 0; i < size / sizeof(uint64_t); i += 0x1000 / sizeof(uint64_t))
+        {
+            output_sum += output[i];
+        }
+        if (true || verbose)
+            std::cout << "out sum: " << output_sum << "\n";
+
         return;
     }
 };

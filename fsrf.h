@@ -32,6 +32,7 @@ public:
     void cntrlreg_write(uint64_t addr, uint64_t value);
     uint64_t cntrlreg_read(uint64_t addr);
 
+    uint64_t get_num_credits();
     /*
     flags -
     permissions on fpga
@@ -58,6 +59,7 @@ private:
 
     // device
     FPGA fpga;
+    uint64_t num_credits;
 
     std::mutex lock;
 
