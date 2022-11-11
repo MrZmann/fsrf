@@ -82,8 +82,10 @@ public:
         {
             output_sum += output[i];
         }
-        if (true || verbose)
+        if (verbose)
             std::cout << "out sum: " << output_sum << "\n";
+
+        assert(output_sum == 8785770774558841555);
 
         return;
     }
