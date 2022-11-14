@@ -97,11 +97,11 @@ void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t dev
     const std::lock_guard<std::mutex> guard(lock);
 
     assert(mode == MMAP);
-    DBG("Length " << (void*) length);
+    DBG("Length " << (void *)length);
     if (length % mmap_dma_size != 0)
     {
         length += mmap_dma_size - (length % mmap_dma_size);
-        DBG("Rounding up length to " << (void*) length);
+        DBG("Rounding up length to " << (void *)length);
     }
 
     length += mmap_dma_size;
@@ -117,19 +117,19 @@ void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t dev
     assert(length % PAGE_SIZE == 0);
     assert(length % mmap_dma_size == 0);
 
-    uint64_t toReturn = (uint64_t) ptr;
+    uint64_t toReturn = (uint64_t)ptr;
 
-    if(toReturn % mmap_dma_size != 0)
+    if (toReturn % mmap_dma_size != 0)
     {
         toReturn = toReturn + (mmap_dma_size - (toReturn % mmap_dma_size));
     }
 
     assert(toReturn % mmap_dma_size == 0);
-    assert(toReturn >= (uint64_t) ptr);
+    assert(toReturn >= (uint64_t)ptr);
 
     VME vme{toReturn, length, device_permissions, nullptr};
     vmes[toReturn] = vme;
-    return (void*) toReturn;
+    return (void *)toReturn;
 }
 
 void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
@@ -409,7 +409,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         vaddr -= vaddr % mmap_dma_size;
         vpn = vaddr >> 12;
 
-        DBG("Aligned vaddr: " << (void*) vaddr);
+        DBG("Aligned vaddr: " << (void *)vaddr);
 
         for (auto it = vmes.begin(); it != vmes.end(); ++it)
         {
