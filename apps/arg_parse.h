@@ -8,12 +8,13 @@ class ArgParse
 {
     FSRF::MODE mode;
     int verbose;
+    int batch_size;
     bool need_app_id;
     uint64_t app_id;
     char *benchmark_name;
 
 public:
-    ArgParse(int argc, char **argv, bool need_app_id = true) : mode(FSRF::MODE::NONE), verbose(false), need_app_id(need_app_id), app_id(~0L), benchmark_name(nullptr)
+    ArgParse(int argc, char **argv, bool need_app_id = true) : mode(FSRF::MODE::NONE), verbose(false), batch_size(1), need_app_id(need_app_id), app_id(~0L), benchmark_name(nullptr)
     {
         read_args(argc, argv);
     }
@@ -34,6 +35,15 @@ public:
         return app_id;
     }
 
+    int getBatchSize()
+    {
+        assert(mode == FSRF::MODE::MMAP || batch_size == 1);
+        assert(batch_size >= 1);
+        assert(batch_size <= 512);
+
+        return batch_size;
+    }
+
     char *getBenchmarkName()
     {
         return benchmark_name;
@@ -43,7 +53,7 @@ private:
     void read_args(int argc, char **argv)
     {
         int opt;
-        while ((opt = getopt(argc, argv, "a:b:m:v")) != -1)
+        while ((opt = getopt(argc, argv, "a:b:m:s:v")) != -1)
         {
             switch (opt)
             {
@@ -74,6 +84,9 @@ private:
                     printf("Unexpected mode!\n");
                     exit(1);
                 }
+                break;
+            case 's':
+                batch_size = atoi(optarg);
                 break;
             default:
                 printf("unknown option: %c\n", optopt);

@@ -24,7 +24,7 @@ public:
         MMAP = 2
     };
 
-    FSRF(uint64_t app_id, MODE mode, bool debug);
+    FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size);
     ~FSRF();
 
     static const char *mode_str(MODE mode);

@@ -16,13 +16,14 @@
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
 
-FSRF::FSRF(uint64_t app_id, MODE mode, bool debug) : debug(debug),
-                                                     mode(mode),
-                                                     fpga(0, app_id),
-                                                     num_credits(0),
-                                                     lock(),
-                                                     app_id(app_id),
-                                                     mmap_dma_size(0x1000)
+FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : 
+                                                    debug(debug),
+                                                    mode(mode),
+                                                    fpga(0, app_id),
+                                                    num_credits(0),
+                                                    lock(),
+                                                    app_id(app_id),
+                                                    mmap_dma_size(batch_size * 0x1000)
 {
     if (fsrf != nullptr)
     {
@@ -36,6 +37,7 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug) : debug(debug),
         ERR("Mode must not be none");
     DBG("app_id: " << app_id);
     DBG("mode: " << mode_str(mode));
+    DBG("batch_size: " << (void*) mmap_dma_size);
 
     faultHandlerThread = std::thread(&FSRF::device_fault_listener, this);
 
@@ -92,11 +94,12 @@ uint64_t FSRF::get_num_credits()
     return num_credits;
 }
 
-void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t device_permissions)
+void *FSRF::fsrf_malloc(uint64_t orig_length, uint64_t host_permissions, uint64_t device_permissions)
 {
     const std::lock_guard<std::mutex> guard(lock);
 
     assert(mode == MMAP);
+    uint64_t length = orig_length;
     DBG("Length " << (void *)length);
     if (length % mmap_dma_size != 0)
     {
@@ -104,13 +107,10 @@ void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t dev
         DBG("Rounding up length to " << (void *)length);
     }
 
-    length += mmap_dma_size;
-
-    void *ptr = mmap(0, length, host_permissions, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *ptr = mmap(0, length + mmap_dma_size, host_permissions, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (ptr == MAP_FAILED)
     {
-        DBG("mmap failed");
-        return ptr;
+        ERR("mmap failed");
     }
 
     DBG("mmap returned pointer: " << ptr);
@@ -124,7 +124,10 @@ void *FSRF::fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t dev
         toReturn = toReturn + (mmap_dma_size - (toReturn % mmap_dma_size));
     }
 
+    DBG("Final mmap range: " << (void*) toReturn << " - " << (void*) (((uint64_t) ptr) + length + mmap_dma_size));
     assert(toReturn % mmap_dma_size == 0);
+    assert(toReturn + orig_length <= ((uint64_t) ptr) + length + mmap_dma_size);
+    assert(((uint64_t) toReturn + length) % mmap_dma_size == 0);
     assert(toReturn >= (uint64_t)ptr);
 
     VME vme{toReturn, length, device_permissions, nullptr};
@@ -149,6 +152,8 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
             // unmap from addr to addr + size
             for (uint64_t vaddr = vme.addr; vaddr < vme.addr + vme.size; vaddr += mmap_dma_size)
             {
+                assert(vaddr % mmap_dma_size == 0);
+                assert(vme.size % mmap_dma_size == 0);
 
                 // this page was never put on the device
                 if (device_vpn_to_ppn.find(vaddr >> 12) == device_vpn_to_ppn.end())
@@ -157,9 +162,10 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
                 for (uint64_t curr = vaddr; curr < vaddr + mmap_dma_size; curr += 0x1000)
                 {
                     uint64_t vpn = curr >> 12;
+                    //TODO assert vpn in here
                     write_tlb(vpn, device_vpn_to_ppn[vpn], false, false, false, false);
                 }
-                mprotect((void *)vaddr, mmap_dma_size, PROT_READ | PROT_WRITE);
+                // mprotect((void *)vaddr, mmap_dma_size, PROT_READ | PROT_WRITE);
 
                 DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
 
@@ -415,6 +421,8 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
             // This is a valid mmapped address
             if (vaddr >= vme.addr && vaddr < vme.addr + vme.size)
             {
+                assert(vme.addr % mmap_dma_size == 0);
+                assert(vme.size % mmap_dma_size == 0);
                 DBG("Found suitable VME");
                 device_ppn = allocate_device_ppn();
                 device_vpn_to_ppn[vpn] = device_ppn;

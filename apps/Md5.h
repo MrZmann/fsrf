@@ -47,13 +47,14 @@ public:
 
     virtual void copy_back_output()
     {
+        uint64_t ab = fsrf->cntrlreg_read(0x0);
+        assert(ab == 15556355606850480896ul);
+        uint64_t cd = fsrf->cntrlreg_read(0x8);
+        assert(cd == 18384567794706069760ul);
         if (verbose)
         {
-            uint64_t val = 0;
-            val = fsrf->cntrlreg_read(0x0);
-            std::cout << "ab: " << val << "\n";
-            val = fsrf->cntrlreg_read(0x8);
-            std::cout << "cd: " << val << "\n";
+            std::cout << "ab: " << ab << "\n";
+            std::cout << "cd: " << cd << "\n";
         }
     }
 };

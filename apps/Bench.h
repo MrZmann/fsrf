@@ -9,6 +9,7 @@ protected:
     FSRF::MODE mode;
     int verbose;
     uint64_t app_id;
+    int batch_size;
 
 public:
     Bench(ArgParse argparse) : mode(FSRF::MODE::NONE), verbose(false), app_id(~0L)
@@ -16,7 +17,8 @@ public:
         mode = argparse.getMode();
         verbose = argparse.getVerbose();
         app_id = argparse.getAppId();
-        fsrf = new FSRF(app_id, mode, verbose);
+        batch_size = argparse.getBatchSize();
+        fsrf = new FSRF(app_id, mode, verbose, batch_size);
     }
 
     virtual ~Bench()
