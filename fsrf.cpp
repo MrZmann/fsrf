@@ -22,7 +22,7 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug) : debug(debug),
                                                      num_credits(0),
                                                      lock(),
                                                      app_id(app_id),
-                                                     mmap_dma_size(512 * 0x1000)
+                                                     mmap_dma_size(0x1000)
 {
     if (fsrf != nullptr)
     {
@@ -317,8 +317,6 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
 
     if (mode == MODE::INV_READ)
     {
-        mprotect((void *)vaddr, bytes, PROT_READ);
-
         // find a place to put the data
         uint64_t device_ppn = allocate_device_ppn();
         // put the data there
@@ -337,11 +335,11 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     }
     else if (mode == MODE::INV_WRITE)
     {
-        mprotect((void *)vaddr, bytes, PROT_READ);
 
         // If we are reading, we need to make it readable on the host and device
         if (read)
         {
+            mprotect((void *)vaddr, bytes, PROT_READ);
             // it is already readonly on the host at this point
 
             // find a place to put the data

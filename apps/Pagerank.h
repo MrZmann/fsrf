@@ -93,5 +93,6 @@ public:
         }
         if (verbose)
             std::cout << "out sum: " << output_sum << "\n";
+        assert(output_sum == 30250157791029322);
     }
 };
