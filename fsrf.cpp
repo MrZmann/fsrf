@@ -162,7 +162,7 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
                 for (uint64_t curr = vaddr; curr < vaddr + mmap_dma_size; curr += 0x1000)
                 {
                     uint64_t vpn = curr >> 12;
-                    //TODO assert vpn in here
+                    assert(device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end());
                     write_tlb(vpn, device_vpn_to_ppn[vpn], false, false, false, false);
                 }
                 // mprotect((void *)vaddr, mmap_dma_size, PROT_READ | PROT_WRITE);
@@ -170,6 +170,7 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
                 DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
 
                 // dma from device to host
+                assert(device_vpn_to_ppn.find(vaddr >> 12) != device_vpn_to_ppn.end());
                 fpga.dma_read((void *)vaddr, device_vpn_to_ppn[vaddr >> 12] << 12, mmap_dma_size);
 
                 DBG("Finished dma read");
@@ -242,6 +243,7 @@ uint64_t FSRF::allocate_device_ppn()
 void FSRF::free_device_vpn(uint64_t vpn)
 {
     // allocated_device_ppns.erase(device_vpn_to_ppn[vpn]);
+    assert(device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end());
     device_vpn_to_ppn.erase(vpn);
 }
 
@@ -401,6 +403,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         if (device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end())
         {
             DBG("Data is already there!");
+            std::cout << "data already here\n";
             respond_tlb(device_vpn_to_ppn[vpn], true);
             return;
         }
@@ -408,6 +411,8 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         assert(mode == MODE::MMAP);
         uint64_t device_ppn = -1;
         VME vme;
+
+        uint64_t fault_vpn = vaddr >> 12;
 
         // align vaddr / vpn to mmap_dma_size
         vaddr -= vaddr % mmap_dma_size;
@@ -434,16 +439,21 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
                     device_vpn_to_ppn[vpn + page] = device_ppn + page;
                 }
 
-                fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
+                //fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
 
-                write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
-                respond_tlb(device_ppn, true);
+                //write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
+                //respond_tlb(device_ppn, true);
 
-                for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
+                //for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
+                for (uint64_t page = 0; page < mmap_dma_size >> 12; ++page)
                 {
+                    assert(device_vpn_to_ppn[vpn + page] == device_ppn + page);
                     write_tlb(vpn + page, device_ppn + page, /*writeable*/ true, true, true, false);
                 }
 
+                fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
+                assert(device_vpn_to_ppn.find(fault_vpn) != device_vpn_to_ppn.end());
+                respond_tlb(device_vpn_to_ppn[fault_vpn], true);
                 return;
             }
         }
