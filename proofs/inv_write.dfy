@@ -105,6 +105,9 @@ method write_tlb(vpn : int, ppn : int, present : bool, readable : bool, writable
         ==> valid_memory(mem, new_tlb, other_mem, other_tlb)
     // ensures valid_memory(mem, tlb, other_mem, other_tlb) && ppn in mem && !writable && !ppn_writable(vpn, other_mem, other_tlb) ==> valid_memory(mem, new_tlb, other_mem, other_tlb)
     
+    ensures no_side_effects(vpn, mem, tlb, mem, new_tlb);
+    
+
     ensures (vpn in tlb && ppn == tlb[vpn].ppn) ==> no_page_aliasing(new_tlb)
     ensures (forall vpn :: vpn in tlb ==> tlb[vpn].ppn != ppn) ==> no_page_aliasing(new_tlb)
 
@@ -129,14 +132,12 @@ function vpn_present(vpn : int, mem : map<int, page>, tlb : map<int, tlb_entry>)
 
 function ppn_readable(vpn : int, mem : map<int, page>, tlb : map<int, tlb_entry>) : bool
 {
-    vpn in tlb && tlb[vpn].present &&
-        tlb[vpn].readable && tlb[vpn].ppn in mem
+    vpn_present(vpn, mem, tlb) && tlb[vpn].readable
 }
 
 function ppn_writable(vpn : int, mem : map<int, page>, tlb : map<int, tlb_entry>) : bool
 {
-    vpn in tlb && tlb[vpn].present &&
-        tlb[vpn].writable && tlb[vpn].ppn in mem
+    vpn_present(vpn, mem, tlb) && tlb[vpn].writable
 }
 
 function data_readable_on_host(data : int, vpn : int, host_mem : map<int, page>, host_tlb : map<int, tlb_entry>) : bool
@@ -164,6 +165,9 @@ function data_unchanged(vpn : int, host_mem : map<int, page>, host_tlb : map<int
             new_device_mem : map<int, page>, new_device_tlb : map<int, tlb_entry>) : bool
             requires ppn_readable(vpn, new_host_mem, new_host_tlb) || ppn_readable(vpn, new_device_mem, new_device_tlb)
             requires ppn_readable(vpn, host_mem, host_tlb) || ppn_readable(vpn, device_mem, device_tlb)
+            requires valid_memory(host_mem, host_tlb, device_mem, device_tlb)
+            // requires forall vpn :: ppn_readable(vpn, host_mem, host_tlb) && ppn_readable(vpn, device_mem, device_tlb) ==> 
+            //     host_mem[host_tlb[vpn].ppn].data == device_mem[device_tlb[vpn].ppn].data;
 {
     var saved_data := if ppn_readable(vpn, new_host_mem, new_host_tlb) then 
         new_host_mem[new_host_tlb[vpn].ppn].data
@@ -188,7 +192,7 @@ function permissions_unchanged(vpn : int, host_mem : map<int, page>, host_tlb : 
     (vpn_present(vpn, host_mem, host_tlb) && vpn_present(vpn, new_host_mem, new_host_tlb) ==> new_host_tlb[vpn] == host_tlb[vpn]) &&
     (vpn_present(vpn, device_mem, device_tlb) && vpn_present(vpn, new_host_mem, new_host_tlb) ==> (new_host_tlb[vpn].readable == device_tlb[vpn].readable) && new_host_tlb[vpn].writable == device_tlb[vpn].writable) &&
 
-    (vpn_present(vpn, device_mem, device_tlb) && vpn_present(vpn, new_device_mem, new_device_tlb) ==> new_device_tlb[vpn] == device_tlb[vpn]) &&
+    (vpn_present(vpn, device_mem, device_tlb) && vpn_present(vpn, new_device_mem, new_device_tlb) ==> new_device_tlb[vpn].readable == device_tlb[vpn].readable && new_device_tlb[vpn].ppn == device_tlb[vpn].ppn) &&
     (vpn_present(vpn, host_mem, host_tlb) && vpn_present(vpn, new_device_mem, new_device_tlb) ==> (host_tlb[vpn].readable == new_device_tlb[vpn].readable) && host_tlb[vpn].writable == new_device_tlb[vpn].writable)
 }
 
@@ -202,9 +206,8 @@ function valid_memory(mem1 : map<int, page>, tlb1 : map<int, tlb_entry>, mem2 : 
 {
     var ppns_valid := valid_ppns(mem1, tlb1) && valid_ppns(mem2, tlb2);
     var no_duplicate_writable_pages := 
-        forall vpn ::
-            !(ppn_writable(vpn, mem1, tlb1) && vpn_present(vpn, mem2, tlb2)) &&
-            !(ppn_writable(vpn, mem2, tlb2) && vpn_present(vpn, mem1, tlb1));
+        (forall vpn :: !(ppn_writable(vpn, mem1, tlb1) && vpn_present(vpn, mem2, tlb2))) &&
+        (forall vpn :: !(ppn_writable(vpn, mem2, tlb2) && vpn_present(vpn, mem1, tlb1)));
 
     var readonly_pages_equal :=
         forall vpn ::
@@ -408,20 +411,20 @@ method write_device(vpn : int, data : int,
 
     returns (new_host_mem : map<int, page>, new_host_tlb : map<int, tlb_entry>, 
             new_device_mem : map<int, page>, new_device_tlb : map<int, tlb_entry>)
+    requires forall ppn :: ppn !in device_mem ==> forall vpn :: vpn in device_tlb ==> device_tlb[vpn].ppn != ppn
 
     // data must exist on the host so that we have a ppn for it
     requires legal_vaddr(vpn, host_mem, host_tlb)
-    // Data must also exist and be readable somewhere
-    requires ppn_writable(vpn, host_mem, host_tlb) || ppn_writable(vpn, device_mem, device_tlb)
+    // Data must also exist somewhere (not necessarily writable since both copies might be read only)
+    requires vpn_present(vpn, host_mem, host_tlb) || vpn_present(vpn, device_mem, device_tlb)
+
     requires valid_memory(host_mem, host_tlb, device_mem, device_tlb)
+    requires no_page_aliasing(host_tlb) && no_page_aliasing(device_tlb)
 
     // ensures vpn_present(vpn, new_host_mem, new_host_tlb)
     // The data should reside on the device after executing this method
     ensures ppn_writable(vpn, new_device_mem, new_device_tlb)
 
-    // read permissions are unchanged
-    ensures (ppn_readable(vpn, host_mem, host_tlb) || ppn_readable(vpn, device_mem, device_tlb)) 
-        == ppn_readable(vpn, new_device_mem, new_device_tlb)
     ensures new_device_mem[new_device_tlb[vpn].ppn].data == data
 
     // The data should not be accessible on the host after executing this method
@@ -431,8 +434,8 @@ method write_device(vpn : int, data : int,
     ensures no_side_effects(vpn, host_mem, host_tlb, new_host_mem, new_host_tlb)
     ensures no_side_effects(vpn, device_mem, device_tlb, device_mem, new_device_tlb)
 
-    ensures permissions_unchanged(vpn, host_mem, host_tlb, device_mem, device_tlb, new_host_mem, new_host_tlb, device_mem, new_device_tlb)
     ensures valid_memory(new_host_mem, new_host_tlb, new_device_mem, new_device_tlb)
+    ensures no_page_aliasing(new_host_tlb) && no_page_aliasing(new_device_tlb)
 {
     new_host_mem := host_mem;
     new_host_tlb := host_tlb;
@@ -440,11 +443,20 @@ method write_device(vpn : int, data : int,
     new_device_mem := device_mem;
     new_device_tlb := device_tlb;
 
+    if vpn in device_tlb && 
+        device_tlb[vpn].present && 
+        !device_tlb[vpn].writable {
+        new_host_tlb := write_tlb(vpn, host_tlb[vpn].ppn, false, false, false, host_tlb, new_host_mem, device_tlb, device_mem);
+        new_device_tlb := write_tlb(vpn, device_tlb[vpn].ppn, true, device_tlb[vpn].readable, true, device_tlb, new_device_mem, new_host_tlb, new_host_mem);
+        new_device_mem := new_device_mem[new_device_tlb[vpn].ppn := page.Node(data)];
+        return;
+    }
+
     if vpn !in device_tlb || !device_tlb[vpn].present {
         var should_be_readable := host_tlb[vpn].readable;
         var ppn;
         ppn, new_device_mem := allocate_device_ppn(device_mem, device_tlb);
-        new_host_tlb := write_tlb(vpn, 0, false, false, false, host_tlb, new_host_mem, new_device_tlb, new_device_mem);
+        new_host_tlb := write_tlb(vpn, host_tlb[vpn].ppn, false, false, false, host_tlb, new_host_mem, new_device_tlb, new_device_mem);
         new_device_tlb := write_tlb(vpn, ppn, true, should_be_readable, true, new_device_tlb, new_device_mem, new_host_tlb, new_host_mem);
         new_device_mem := dma_write(vpn, host_mem, host_tlb, new_device_mem, new_device_tlb);
     } 
