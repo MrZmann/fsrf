@@ -82,8 +82,10 @@ private:
 
     uint64_t mmap_dma_size;
 
+public:
     std::unordered_map<std::string, std::chrono::duration<int64_t, std::nano>> cumulative_times;
     std::unordered_map<std::string, std::chrono::high_resolution_clock::time_point> last_start;
+private:
 
     void
     respond_tlb(uint64_t ppn, uint64_t valid);

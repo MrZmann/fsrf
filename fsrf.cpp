@@ -16,25 +16,26 @@ using namespace std::chrono;
         exit(1);                                                                        \
     }
 
-#define TRACK(name)
-{
-    cumulative_times[name] = 0;
+
+#define TRACK(name)                                                  \
+{                                                                    \
+    fsrf->cumulative_times[name] = std::chrono::nanoseconds::zero(); \
 }
 
-#define START(name)
-{
-    assert(cumulative_times.find(name) != cumulative_times.end());
-    // assert(last_start.find(name) != last_start.end());
-    last_start[name] = high_resolution_clock::now();
+#define START(name)                                                 \
+{                                                                   \
+    assert(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end());  \
+    fsrf->last_start[name] = high_resolution_clock::now();                \
+}                                                   
+
+#define END(name)                                                               \
+{                                                                               \
+    assert(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end());  \
+    assert(fsrf->last_start.find(name) != fsrf->last_start.end());              \
+    auto end = high_resolution_clock::now();                                    \
+    fsrf->cumulative_times[name] += end - fsrf->last_start[name];               \
 }
 
-#define END(name)
-{
-    assert(cumulative_times.find(name) != cumulative_times.end());
-    assert(last_start.find(name) != last_start.end());
-    auto end = high_resolution_clock::now();
-    cumulative_times[name] += end - last_start[name];
-}
 
 #define PAGE_SIZE 0x1000
 // Global instance for the SIGSEGV handler to use
@@ -105,7 +106,7 @@ FSRF::~FSRF()
     abort = true;
     faultHandlerThread.join();
 
-    for (auto it = cumulative_times.begin(); it != symbcumulative_timesolTable.end(); it++)
+    for (auto it = cumulative_times.begin(); it != cumulative_times.end(); it++)
     {
         std::cout << it->first << ", " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
     }
@@ -563,7 +564,7 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 
             // invalidate on tlb
             fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, false, false, false);
-            timed_mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
+            fsrf->timed_mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
 
             DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
 
@@ -581,7 +582,7 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
             // set to readonly on TLB
             fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, true, true, false);
 
-            timed_mprotect((void *)vaddr, 1 << 12, PROT_READ);
+            fsrf->timed_mprotect((void *)vaddr, 1 << 12, PROT_READ);
 
             // dma from device to host
             // we have to dma because the device has written to this page
@@ -600,7 +601,7 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
     ERR("Host tried to access illegal address: " << info->si_addr);
 }
 
-int timed_mprotect(void *addr, size_t len, int prot)
+int FSRF::timed_mprotect(void *addr, size_t len, int prot)
 {
     START("MPROTECT");
     int res = mprotect(addr, len, prot);

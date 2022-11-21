@@ -1,27 +1,27 @@
 #include <chrono>
 #include <cstring>
+#include <iostream>
 #include "fpga.h"
 
 using namespace std::chrono;
 
-#define TRACK(name)
-{
-    cumulative_times[name] = 0;
+#define TRACK(name)                                             \
+{                                                               \
+    cumulative_times[name] = std::chrono::nanoseconds::zero();  \
 }
 
-#define START(name)
-{
-    assert(cumulative_times.find(name) != cumulative_times.end());
-    // assert(last_start.find(name) != last_start.end());
-    last_start[name] = high_resolution_clock::now();
-}
+#define START(name)                                                 \
+{                                                                   \
+    assert(cumulative_times.find(name) != cumulative_times.end());  \
+    last_start[name] = high_resolution_clock::now();                \
+}                                                   
 
-#define END(name)
-{
-    assert(cumulative_times.find(name) != cumulative_times.end());
-    assert(last_start.find(name) != last_start.end());
-    auto end = high_resolution_clock::now();
-    cumulative_times[name] += end - last_start[name];
+#define END(name)                                                   \
+{                                                                   \
+    assert(cumulative_times.find(name) != cumulative_times.end());  \
+    assert(last_start.find(name) != last_start.end());              \
+    auto end = high_resolution_clock::now();                        \
+    cumulative_times[name] += end - last_start[name];               \
 }
 
 FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
@@ -96,7 +96,7 @@ out:
 
 FPGA::~FPGA()
 {
-    for (auto it = cumulative_times.begin(); it != symbcumulative_timesolTable.end(); it++)
+    for (auto it = cumulative_times.begin(); it != cumulative_times.end(); it++)
     {
         std::cout << it->first << ", " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
     }
