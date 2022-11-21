@@ -1,28 +1,67 @@
+#include <chrono>
 #include <cstring>
 #include "fpga.h"
 
+using namespace std::chrono;
+
+#define TRACK(name)
+{
+    cumulative_times[name] = 0;
+}
+
+#define START(name)
+{
+    assert(cumulative_times.find(name) != cumulative_times.end());
+    // assert(last_start.find(name) != last_start.end());
+    last_start[name] = high_resolution_clock::now();
+}
+
+#define END(name)
+{
+    assert(cumulative_times.find(name) != cumulative_times.end());
+    assert(last_start.find(name) != last_start.end());
+    auto end = high_resolution_clock::now();
+    cumulative_times[name] += end - last_start[name];
+}
 
 FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
 {
+    TRACK("APP_REG");
+    TRACK("SYS_REG");
+    TRACK("MEM_REG");
+    TRACK("DMA_READ");
+    TRACK("DMA_WRITE");
+    TRACK("LIB_INIT");
+    TRACK("ATTACH_PCI");
+    TRACK("HUGE_PAGE");
+
     int rc, fd;
     int xfer_buf_size = 2 << 20;
     // char xdma_str[19];
 
     // Init FPGA library
+    START("LIB_INIT");
     rc = fpga_mgmt_init();
+    END("LIB_INIT");
+
     fail_on(rc, out, "Unable to initialize the fpga_mgmt library\n");
+
+    START("ATTACH_PCI");
 
     // Attach PCIe BARs
     rc |= fpga_pci_attach(slot, FPGA_APP_PF, APP_PF_BAR0, 0, &app_bar_handle);
     rc |= fpga_pci_attach(slot, FPGA_APP_PF, APP_PF_BAR1, 0, &sys_bar_handle);
     rc |= fpga_pci_attach(slot, FPGA_APP_PF, APP_PF_BAR4, BURST_CAPABLE, &mem_bar_handle);
     fail_on(rc, out, "Unable to attach PCIe BAR(s)\n");
+    END("ATTACH_PCI");
 
     read_sys_reg(9, app_id * 8, pages_xfered);
 
     fd = open("/proc/sys/vm/nr_hugepages", O_WRONLY);
     pwrite(fd, "4\n", 3, 0);
     close(fd);
+
+    START("HUGE_PAGE");
 
     xfer_buf = ::mmap(NULL, xfer_buf_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
     if (xfer_buf == MAP_FAILED)
@@ -48,39 +87,67 @@ FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
             exit(EXIT_FAILURE);
         }
     }
+    END("HUGE_PAGE");
+
     // printf("xfer_buf phys base: 0x%lX\n", phys_buf);
 out:
     return;
 }
 
+FPGA::~FPGA()
+{
+    for (auto it = cumulative_times.begin(); it != symbcumulative_timesolTable.end(); it++)
+    {
+        std::cout << it->first << ", " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
+    }
+}
+
 int FPGA::read_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
 {
-    return reg_access(app_bar_handle, app_id, addr, value, false, true);
+    START("APP_REG");
+    int res = reg_access(app_bar_handle, app_id, addr, value, false, true);
+    END("APP_REG");
+    return res;
 }
 
 int FPGA::write_app_reg(uint64_t app_id, uint64_t addr, uint64_t value)
 {
-    return reg_access(app_bar_handle, app_id, addr, value, true, true);
+    START("APP_REG");
+    int res = reg_access(app_bar_handle, app_id, addr, value, true, true);
+    END("APP_REG");
+    return res;
 }
 
 int FPGA::read_sys_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
 {
-    return reg_access(sys_bar_handle, app_id, addr, value, false, true);
+    START("SYS_REG");
+    int res = reg_access(sys_bar_handle, app_id, addr, value, false, true);
+    END("SYS_REG");
+    return res;
 }
 
 int FPGA::write_sys_reg(uint64_t app_id, uint64_t addr, uint64_t value)
 {
-    return reg_access(sys_bar_handle, app_id, addr, value, true, true);
+    START("SYS_REG");
+    int res = reg_access(sys_bar_handle, app_id, addr, value, true, true);
+    END("SYS_REG");
+    return res;
 }
 
 int FPGA::read_mem_reg(uint64_t addr, uint64_t &value)
 {
-    return reg_access(mem_bar_handle, 0, addr, value, false, false);
+    START("MEM_REG");
+    int res = reg_access(mem_bar_handle, 0, addr, value, false, false);
+    END("MEM_REG");
+    return res;
 }
 
 int FPGA::write_mem_reg(uint64_t addr, uint64_t value)
 {
-    return reg_access(mem_bar_handle, 0, addr, value, true, false);
+    START("MEM_REG");
+    int res = reg_access(mem_bar_handle, 0, addr, value, true, false);
+    END("MEM_REG");
+    return res;
 }
 
 uint64_t FPGA::virt_to_phys(uint64_t virt_addr)
@@ -105,23 +172,27 @@ uint64_t FPGA::virt_to_phys(uint64_t virt_addr)
 
 int FPGA::dma_read(void *buf, uint64_t addr, uint64_t bytes)
 {
+    START("DMA_READ");
     assert(addr % 0x1000 == 0);
     assert(bytes % 0x1000 == 0);
     uint64_t num_pages = bytes / 0x1000;
     dma_wrapper(true, num_pages, addr / 0x1000, app_id);
     std::memcpy(buf, xfer_buf, bytes);
     std::memset(xfer_buf, 0, bytes);
+    END("DMA_READ");
     return 0;
 }
 
 int FPGA::dma_write(void *buf, uint64_t addr, uint64_t bytes)
 {
+    START("DMA_WRITE");
     assert(addr % 0x1000 == 0);
     assert(bytes % 0x1000 == 0);
     uint64_t num_pages = bytes / 0x1000;
     std::memcpy(xfer_buf, buf, bytes);
     dma_wrapper(false, num_pages, addr / 0x1000, app_id);
     std::memset(xfer_buf, 0, bytes);
+    END("DMA_WRITE");
     return 0;
 }
 

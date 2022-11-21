@@ -1,8 +1,11 @@
 #include <assert.h>
+#include <chrono>
 #include <iostream>
 #include <sys/mman.h>
 
 #include "fsrf.h"
+
+using namespace std::chrono;
 
 #define DBG(x)       \
     if (fsrf->debug) \
@@ -12,18 +15,38 @@
         std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; \
         exit(1);                                                                        \
     }
+
+#define TRACK(name)
+{
+    cumulative_times[name] = 0;
+}
+
+#define START(name)
+{
+    assert(cumulative_times.find(name) != cumulative_times.end());
+    // assert(last_start.find(name) != last_start.end());
+    last_start[name] = high_resolution_clock::now();
+}
+
+#define END(name)
+{
+    assert(cumulative_times.find(name) != cumulative_times.end());
+    assert(last_start.find(name) != last_start.end());
+    auto end = high_resolution_clock::now();
+    cumulative_times[name] += end - last_start[name];
+}
+
 #define PAGE_SIZE 0x1000
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
 
-FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : 
-                                                    debug(debug),
-                                                    mode(mode),
-                                                    fpga(0, app_id),
-                                                    num_credits(0),
-                                                    lock(),
-                                                    app_id(app_id),
-                                                    mmap_dma_size(batch_size * 0x1000)
+FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : debug(debug),
+                                                                     mode(mode),
+                                                                     fpga(0, app_id),
+                                                                     num_credits(0),
+                                                                     lock(),
+                                                                     app_id(app_id),
+                                                                     mmap_dma_size(batch_size * 0x1000)
 {
     if (fsrf != nullptr)
     {
@@ -31,15 +54,23 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) :
     }
     fsrf = this;
 
+    TRACK("MMAP");
+    TRACK("MPROTECT");
+    TRACK("FAULT_HANDLER_CREATION");
+    TRACK("REGISTER_SIG_HANDLER");
+    TRACK("FLUSH_TLB");
+
     if (app_id > 3)
         ERR("app_id must be in range [0, 3]\nGiven: " << app_id);
     if (mode == FSRF::MODE::NONE)
         ERR("Mode must not be none");
     DBG("app_id: " << app_id);
     DBG("mode: " << mode_str(mode));
-    DBG("batch_size: " << (void*) mmap_dma_size);
+    DBG("batch_size: " << (void *)mmap_dma_size);
 
+    START("FAULT_HANDLER_CREATION");
     faultHandlerThread = std::thread(&FSRF::device_fault_listener, this);
+    END("FAULT_HANDLER_CREATION");
 
     fpga.write_sys_reg(app_id, 0x10, 1);       // enable tlb
     fpga.write_sys_reg(app_id, 0x18, 1);       // use dram tlb
@@ -48,10 +79,12 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) :
 
     DBG("Registering host signal handler");
 
+    START("REGISTER_SIG_HANDLER");
     struct sigaction act = {0};
     act.sa_sigaction = FSRF::handle_host_fault;
     act.sa_flags = SA_SIGINFO;
     sigaction(SIGSEGV, &act, NULL);
+    END("REGISTER_SIG_HANDLER");
 
     uint64_t addrs[4] = {0, 8 << 20, 4 << 20, 12 << 20};
     // offset 128 MB for TLB
@@ -62,13 +95,20 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) :
 
     assert(mmap_dma_size % 0x1000 == 0);
 
+    START("FLUSH_TLB");
     flush_tlb();
+    END("FLUSH_TLB");
 }
 
 FSRF::~FSRF()
 {
     abort = true;
     faultHandlerThread.join();
+
+    for (auto it = cumulative_times.begin(); it != symbcumulative_timesolTable.end(); it++)
+    {
+        std::cout << it->first << ", " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
+    }
 }
 
 const char *FSRF::mode_str(MODE mode)
@@ -107,7 +147,9 @@ void *FSRF::fsrf_malloc(uint64_t orig_length, uint64_t host_permissions, uint64_
         DBG("Rounding up length to " << (void *)length);
     }
 
+    START("MMAP");
     void *ptr = mmap(0, length + mmap_dma_size, host_permissions, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    END("MMAP");
     if (ptr == MAP_FAILED)
     {
         ERR("mmap failed");
@@ -124,10 +166,10 @@ void *FSRF::fsrf_malloc(uint64_t orig_length, uint64_t host_permissions, uint64_
         toReturn = toReturn + (mmap_dma_size - (toReturn % mmap_dma_size));
     }
 
-    DBG("Final mmap range: " << (void*) toReturn << " - " << (void*) (((uint64_t) ptr) + length + mmap_dma_size));
+    DBG("Final mmap range: " << (void *)toReturn << " - " << (void *)(((uint64_t)ptr) + length + mmap_dma_size));
     assert(toReturn % mmap_dma_size == 0);
-    assert(toReturn + orig_length <= ((uint64_t) ptr) + length + mmap_dma_size);
-    assert(((uint64_t) toReturn + length) % mmap_dma_size == 0);
+    assert(toReturn + orig_length <= ((uint64_t)ptr) + length + mmap_dma_size);
+    assert(((uint64_t)toReturn + length) % mmap_dma_size == 0);
     assert(toReturn >= (uint64_t)ptr);
 
     VME vme{toReturn, length, device_permissions, nullptr};
@@ -165,7 +207,7 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
                     assert(device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end());
                     write_tlb(vpn, device_vpn_to_ppn[vpn], false, false, false, false);
                 }
-                // mprotect((void *)vaddr, mmap_dma_size, PROT_READ | PROT_WRITE);
+                // timed_mprotect((void *)vaddr, mmap_dma_size, PROT_READ | PROT_WRITE);
 
                 DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
 
@@ -333,7 +375,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         device_vpn_to_ppn[vpn] = device_ppn;
 
         // make it inaccessible on the host
-        mprotect((void *)vaddr, bytes, PROT_NONE);
+        timed_mprotect((void *)vaddr, bytes, PROT_NONE);
 
         // create a tlb entry
         write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
@@ -347,7 +389,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         // If we are reading, we need to make it readable on the host and device
         if (read)
         {
-            mprotect((void *)vaddr, bytes, PROT_READ);
+            timed_mprotect((void *)vaddr, bytes, PROT_READ);
             // it is already readonly on the host at this point
 
             // find a place to put the data
@@ -371,7 +413,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
             // and make it writeable on the device
             if (device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end())
             {
-                mprotect((void *)vaddr, bytes, PROT_NONE);
+                timed_mprotect((void *)vaddr, bytes, PROT_NONE);
                 write_tlb(vpn, device_vpn_to_ppn[vpn], /*writeable*/ true, true, true, false);
                 respond_tlb(device_vpn_to_ppn[vpn], true);
             }
@@ -389,7 +431,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
                 write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
 
                 // invalidate on host
-                mprotect((void *)vaddr, bytes, PROT_NONE);
+                timed_mprotect((void *)vaddr, bytes, PROT_NONE);
 
                 // respond to the fault
                 respond_tlb(device_ppn, true);
@@ -439,12 +481,12 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
                     device_vpn_to_ppn[vpn + page] = device_ppn + page;
                 }
 
-                //fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
+                // fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
 
-                //write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
-                //respond_tlb(device_ppn, true);
+                // write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
+                // respond_tlb(device_ppn, true);
 
-                //for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
+                // for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
                 for (uint64_t page = 0; page < mmap_dma_size >> 12; ++page)
                 {
                     assert(device_vpn_to_ppn[vpn + page] == device_ppn + page);
@@ -521,7 +563,7 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 
             // invalidate on tlb
             fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, false, false, false);
-            mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
+            timed_mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
 
             DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
 
@@ -539,15 +581,13 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
             // set to readonly on TLB
             fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, true, true, false);
 
-            mprotect((void *)vaddr, 1 << 12, PROT_READ | PROT_WRITE);
+            timed_mprotect((void *)vaddr, 1 << 12, PROT_READ);
 
             // dma from device to host
             // we have to dma because the device has written to this page
             fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn] << 12, (uint64_t)1 << 12);
 
             DBG("Finished dma read");
-            // set as readonly on host
-            mprotect((void *)vaddr, 1 << 12, PROT_READ);
         }
         else
         {
@@ -558,4 +598,12 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 
     // Page wasn't supposed to be accessible after all
     ERR("Host tried to access illegal address: " << info->si_addr);
+}
+
+int timed_mprotect(void *addr, size_t len, int prot)
+{
+    START("MPROTECT");
+    int res = mprotect(addr, len, prot);
+    END("MPROTECT");
+    return res;
 }

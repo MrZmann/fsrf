@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <assert.h>
 #include <chrono>
@@ -72,4 +72,7 @@ private:
 
     int reg_access(pci_bar_handle_t &bar_handle, uint64_t app_id, uint64_t addr,
                    uint64_t &value, bool write, bool mask);
+
+    std::unordered_map<std::string, std::chrono::duration<int64_t, std::nano>> cumulative_times;
+    std::unordered_map<std::string, std::chrono::high_resolution_clock::time_point> last_start;
 };

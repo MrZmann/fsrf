@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <map>
 #include <mutex>
 #include <set>
@@ -81,6 +82,9 @@ private:
 
     uint64_t mmap_dma_size;
 
+    std::unordered_map<std::string, std::chrono::duration<int64_t, std::nano>> cumulative_times;
+    std::unordered_map<std::string, std::chrono::high_resolution_clock::time_point> last_start;
+
     void
     respond_tlb(uint64_t ppn, uint64_t valid);
     uint64_t allocate_device_ppn();
@@ -106,4 +110,6 @@ private:
     void device_fault_listener();
 
     static void handle_host_fault(int sig, siginfo_t *info, void *ucontext);
+
+    int timed_mprotect(void *addr, size_t len, int prot);
 };
