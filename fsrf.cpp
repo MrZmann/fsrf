@@ -58,7 +58,10 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : debug(debug
 
     TRACK("MMAP");
     TRACK("MPROTECT");
-    TRACK("FLUSH_TLB");
+    TRACK("MPROTECT_NONE");
+    TRACK("MPROTECT_NONE_TO_R");
+    TRACK("MPROTECT_NONE_TO_RW");
+    TRACK("MPROTECT_RW_TO_R");
 
     if (app_id > 3)
         ERR("app_id must be in range [0, 3]\nGiven: " << app_id);
@@ -91,9 +94,7 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : debug(debug
 
     assert(mmap_dma_size % 0x1000 == 0);
 
-    START("FLUSH_TLB");
-    flush_tlb();
-    END("FLUSH_TLB");
+    //flush_tlb();
 }
 
 FSRF::~FSRF()
@@ -388,8 +389,10 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         // If we are reading, we need to make it readable on the host and device
         if (read)
         {
+    START("MPROTECT_RW_TO_R");
             timed_mprotect((void *)vaddr, bytes, PROT_READ);
             // it is already readonly on the host at this point
+    END("MPROTECT_RW_TO_R");
 
             // find a place to put the data
             uint64_t device_ppn = allocate_device_ppn();
@@ -580,7 +583,9 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
             // set to readonly on TLB
             fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, true, true, false);
 
+    START("MPROTECT_NONE_TO_R");
             fsrf->timed_mprotect((void *)vaddr, 1 << 12, PROT_READ);
+    END("MPROTECT_NONE_TO_R");
 
             // dma from device to host
             // we have to dma because the device has written to this page
@@ -601,8 +606,21 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 
 int FSRF::timed_mprotect(void *addr, size_t len, int prot)
 {
-    START("MPROTECT");
+    //START("MPROTECT");
+    if(prot == PROT_NONE) {
+        START("MPROTECT_NONE");
+    } else if (prot == (PROT_READ | PROT_WRITE)) {
+        START("MPROTECT_NONE_TO_RW");
+    }
+
     int res = mprotect(addr, len, prot);
-    END("MPROTECT");
+    if(prot == PROT_NONE) {
+        END("MPROTECT_NONE");
+    } else if (prot == (PROT_READ | PROT_WRITE)) {
+        END("MPROTECT_NONE_TO_RW");
+    }
+
+
+    //END("MPROTECT");
     return res;
 }
