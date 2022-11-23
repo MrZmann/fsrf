@@ -8,12 +8,14 @@ using namespace std::chrono;
 #define TRACK(name)                                             \
 {                                                               \
     cumulative_times[name] = std::chrono::nanoseconds::zero();  \
+    num_calls[name] = 0;                                        \
 }
 
 #define START(name)                                                 \
 {                                                                   \
     assert(cumulative_times.find(name) != cumulative_times.end());  \
     last_start[name] = high_resolution_clock::now();                \
+    num_calls[name] += 1;                                           \
 }                                                   
 
 #define END(name)                                                   \
@@ -31,7 +33,6 @@ FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
     TRACK("MEM_REG");
     TRACK("DMA_READ");
     TRACK("DMA_WRITE");
-    TRACK("LIB_INIT");
     TRACK("ATTACH_PCI");
     TRACK("HUGE_PAGE");
 
@@ -40,9 +41,7 @@ FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
     // char xdma_str[19];
 
     // Init FPGA library
-    START("LIB_INIT");
     rc = fpga_mgmt_init();
-    END("LIB_INIT");
 
     fail_on(rc, out, "Unable to initialize the fpga_mgmt library\n");
 
@@ -98,7 +97,11 @@ FPGA::~FPGA()
 {
     for (auto it = cumulative_times.begin(); it != cumulative_times.end(); it++)
     {
-        std::cout << it->first << ", " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
+        std::cout << it->first << "_MS, " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
+    }
+    for (auto it = num_calls.begin(); it != num_calls.end(); it++)
+    {
+        std::cout << it->first << "_CALLS, " << it->second << "\n";
     }
 }
 

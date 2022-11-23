@@ -9,7 +9,8 @@ using namespace std::chrono;
 
 #define DBG(x)       \
     if (fsrf->debug) \
-    std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
+        std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
+
 #define ERR(x)                                                                          \
     {                                                                                   \
         std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; \
@@ -20,12 +21,14 @@ using namespace std::chrono;
 #define TRACK(name)                                                  \
 {                                                                    \
     fsrf->cumulative_times[name] = std::chrono::nanoseconds::zero(); \
+    fsrf->num_calls[name] = 0;                                       \
 }
 
-#define START(name)                                                 \
-{                                                                   \
+#define START(name)                                                             \
+{                                                                               \
     assert(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end());  \
-    fsrf->last_start[name] = high_resolution_clock::now();                \
+    fsrf->last_start[name] = high_resolution_clock::now();                      \
+    fsrf->num_calls[name] += 1;                                                 \
 }                                                   
 
 #define END(name)                                                               \
@@ -57,8 +60,6 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : debug(debug
 
     TRACK("MMAP");
     TRACK("MPROTECT");
-    TRACK("FAULT_HANDLER_CREATION");
-    TRACK("REGISTER_SIG_HANDLER");
     TRACK("FLUSH_TLB");
 
     if (app_id > 3)
@@ -69,9 +70,7 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : debug(debug
     DBG("mode: " << mode_str(mode));
     DBG("batch_size: " << (void *)mmap_dma_size);
 
-    START("FAULT_HANDLER_CREATION");
     faultHandlerThread = std::thread(&FSRF::device_fault_listener, this);
-    END("FAULT_HANDLER_CREATION");
 
     fpga.write_sys_reg(app_id, 0x10, 1);       // enable tlb
     fpga.write_sys_reg(app_id, 0x18, 1);       // use dram tlb
@@ -80,12 +79,10 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : debug(debug
 
     DBG("Registering host signal handler");
 
-    START("REGISTER_SIG_HANDLER");
     struct sigaction act = {0};
     act.sa_sigaction = FSRF::handle_host_fault;
     act.sa_flags = SA_SIGINFO;
     sigaction(SIGSEGV, &act, NULL);
-    END("REGISTER_SIG_HANDLER");
 
     uint64_t addrs[4] = {0, 8 << 20, 4 << 20, 12 << 20};
     // offset 128 MB for TLB
@@ -105,10 +102,13 @@ FSRF::~FSRF()
 {
     abort = true;
     faultHandlerThread.join();
-
     for (auto it = cumulative_times.begin(); it != cumulative_times.end(); it++)
     {
-        std::cout << it->first << ", " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
+        std::cout << it->first << "_MS, " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
+    }
+    for (auto it = num_calls.begin(); it != num_calls.end(); it++)
+    {
+        std::cout << it->first << "_CALLS, " << it->second << "\n";
     }
 }
 
