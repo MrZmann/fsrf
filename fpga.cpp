@@ -5,28 +5,28 @@
 
 using namespace std::chrono;
 
-#define TRACK(name)                                             \
-{                                                               \
-    cumulative_times[name] = std::chrono::nanoseconds::zero();  \
-    num_calls[name] = 0;                                        \
-}
+#define TRACK(name)                                                \
+    {                                                              \
+        cumulative_times[name] = std::chrono::nanoseconds::zero(); \
+        num_calls[name] = 0;                                       \
+    }
 
-#define START(name)                                                 \
-{                                                                   \
-    assert(cumulative_times.find(name) != cumulative_times.end());  \
-    last_start[name] = high_resolution_clock::now();                \
-    num_calls[name] += 1;                                           \
-}                                                   
+#define START(name)                                                    \
+    {                                                                  \
+        assert(cumulative_times.find(name) != cumulative_times.end()); \
+        last_start[name] = high_resolution_clock::now();               \
+        num_calls[name] += 1;                                          \
+    }
 
-#define END(name)                                                   \
-{                                                                   \
-    assert(cumulative_times.find(name) != cumulative_times.end());  \
-    assert(last_start.find(name) != last_start.end());              \
-    auto end = high_resolution_clock::now();                        \
-    cumulative_times[name] += end - last_start[name];               \
-}
+#define END(name)                                                      \
+    {                                                                  \
+        assert(cumulative_times.find(name) != cumulative_times.end()); \
+        assert(last_start.find(name) != last_start.end());             \
+        auto end = high_resolution_clock::now();                       \
+        cumulative_times[name] += end - last_start[name];              \
+    }
 
-FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
+FPGA::FPGA(uint64_t slot, uint64_t app_id, uint64_t base_tlb_addr) : app_id(app_id)
 {
     TRACK("APP_REG");
     TRACK("SYS_REG");
@@ -35,6 +35,7 @@ FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
     TRACK("DMA_WRITE");
     TRACK("ATTACH_PCI");
     TRACK("HUGE_PAGE");
+    TRACK("ZERO_TLB");
 
     int rc, fd;
     int xfer_buf_size = 2 << 20;
@@ -88,7 +89,13 @@ FPGA::FPGA(uint64_t slot, uint64_t app_id) : app_id(app_id)
     }
     END("HUGE_PAGE");
 
-    // printf("xfer_buf phys base: 0x%lX\n", phys_buf);
+    // zero out TLB
+    START("ZERO_TLB");
+    for (uint64_t ppn = base_tlb_addr; ppn <= 32768; ppn += 512)
+    {
+        dma_wrapper(false, 512, ppn, app_id);
+    }
+    END("ZERO_TLB");
 out:
     return;
 }

@@ -9,7 +9,7 @@ using namespace std::chrono;
 
 #define DBG(x)       \
     if (fsrf->debug) \
-        std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
+    std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
 
 #define ERR(x)                                                                          \
     {                                                                                   \
@@ -17,39 +17,37 @@ using namespace std::chrono;
         exit(1);                                                                        \
     }
 
+#define TRACK(name)                                                      \
+    {                                                                    \
+        fsrf->cumulative_times[name] = std::chrono::nanoseconds::zero(); \
+        fsrf->num_calls[name] = 0;                                       \
+    }
 
-#define TRACK(name)                                                  \
-{                                                                    \
-    fsrf->cumulative_times[name] = std::chrono::nanoseconds::zero(); \
-    fsrf->num_calls[name] = 0;                                       \
-}
+#define START(name)                                                                \
+    {                                                                              \
+        assert(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end()); \
+        fsrf->last_start[name] = high_resolution_clock::now();                     \
+        fsrf->num_calls[name] += 1;                                                \
+    }
 
-#define START(name)                                                             \
-{                                                                               \
-    assert(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end());  \
-    fsrf->last_start[name] = high_resolution_clock::now();                      \
-    fsrf->num_calls[name] += 1;                                                 \
-}                                                   
-
-#define END(name)                                                               \
-{                                                                               \
-    assert(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end());  \
-    assert(fsrf->last_start.find(name) != fsrf->last_start.end());              \
-    auto end = high_resolution_clock::now();                                    \
-    fsrf->cumulative_times[name] += end - fsrf->last_start[name];               \
-}
-
+#define END(name)                                                                  \
+    {                                                                              \
+        assert(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end()); \
+        assert(fsrf->last_start.find(name) != fsrf->last_start.end());             \
+        auto end = high_resolution_clock::now();                                   \
+        fsrf->cumulative_times[name] += end - fsrf->last_start[name];              \
+    }
 
 #define PAGE_SIZE 0x1000
 // Global instance for the SIGSEGV handler to use
 FSRF *fsrf = nullptr;
 
 FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : debug(debug),
+                                                                     app_id(app_id),
                                                                      mode(mode),
-                                                                     fpga(0, app_id),
+                                                                     fpga(0, app_id, dram_tlb_addr(0)),
                                                                      num_credits(0),
                                                                      lock(),
-                                                                     app_id(app_id),
                                                                      mmap_dma_size(batch_size * 0x1000)
 {
     if (fsrf != nullptr)

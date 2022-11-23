@@ -48,6 +48,7 @@ public:
 
 private:
     bool debug;
+    uint64_t app_id;
     bool abort = false;
     MODE mode;
 
@@ -66,7 +67,6 @@ private:
 
     // host info
     std::thread faultHandlerThread;
-    uint64_t app_id;
 
     // mmap info
     struct VME
@@ -86,8 +86,8 @@ public:
     std::unordered_map<std::string, std::chrono::duration<int64_t, std::nano>> cumulative_times;
     std::unordered_map<std::string, std::chrono::high_resolution_clock::time_point> last_start;
     std::unordered_map<std::string, uint64_t> num_calls;
-private:
 
+private:
     void
     respond_tlb(uint64_t ppn, uint64_t valid);
     uint64_t allocate_device_ppn();

@@ -33,7 +33,7 @@ class FPGA
     uint64_t app_id;
 
 public:
-    FPGA(uint64_t slot, uint64_t app_id);
+    FPGA(uint64_t slot, uint64_t app_id, uint64_t base_tlb_addr);
     ~FPGA();
 
     int read_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value);
