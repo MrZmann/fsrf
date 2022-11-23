@@ -213,6 +213,8 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
 
                 // dma from device to host
                 assert(device_vpn_to_ppn.find(vaddr >> 12) != device_vpn_to_ppn.end());
+                // temporary, for experiment
+                timed_mprotect((void *)vaddr, 0x1000, PROT_READ | PROT_WRITE);
                 fpga.dma_read((void *)vaddr, device_vpn_to_ppn[vaddr >> 12] << 12, mmap_dma_size);
 
                 DBG("Finished dma read");
@@ -367,6 +369,10 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
 
     if (mode == MODE::INV_READ)
     {
+        if (device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end()) {
+
+            std::cout << "Data already there\n";
+        }
         // find a place to put the data
         uint64_t device_ppn = allocate_device_ppn();
         // put the data there
@@ -496,6 +502,8 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
                 }
 
                 fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
+                //temporary for experiment
+                timed_mprotect((void *)vaddr, bytes, PROT_NONE);
                 assert(device_vpn_to_ppn.find(fault_vpn) != device_vpn_to_ppn.end());
                 respond_tlb(device_vpn_to_ppn[fault_vpn], true);
                 return;

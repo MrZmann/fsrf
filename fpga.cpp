@@ -186,10 +186,18 @@ int FPGA::dma_read(void *buf, uint64_t addr, uint64_t bytes)
     assert(addr % 0x1000 == 0);
     assert(bytes % 0x1000 == 0);
     uint64_t num_pages = bytes / 0x1000;
+    assert(num_pages == 1);
     dma_wrapper(true, num_pages, addr / 0x1000, app_id);
     std::memcpy(buf, xfer_buf, bytes);
     std::memset(xfer_buf, 0, bytes);
     END("DMA_READ");
+
+    if(num_calls["DMA_READ"] % 0x1000 == 0){
+        auto end = high_resolution_clock::now();
+        std::cout << (end - last_start["DMA_READ"]).count() << "\n"; 
+
+    }
+
     return 0;
 }
 
