@@ -7,12 +7,7 @@ using namespace std::chrono;
 
 #ifdef DEBUG
 #define DBG(x) std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
-
-#define ASSERT(b)        \
-    {                    \
-        if (fsrf->debug) \
-            assert(b);   \
-    }
+#define ASSERT(b) assert(b) 
 #else
 #define DBG(x) \
     {          \

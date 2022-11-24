@@ -1,4 +1,4 @@
-#include <ASSERT.h>
+#include <assert.h>
 #include <chrono>
 #include <iostream>
 #include <sys/mman.h>
@@ -14,13 +14,8 @@ using namespace std::chrono;
     }
 
 #ifdef DEBUG
-#define DBG(x) std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
-
-#define ASSERT(b)        \
-    {                    \
-        if (fsrf->debug) \
-            assert(b);   \
-    }
+#define DBG(x) if (fsrf->debug) std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
+#define ASSERT(b) assert(b)
 #else
 #define DBG(x) \
     {          \
@@ -505,8 +500,12 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
                 for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
                 {
                     // allocations guaranteed to be contiguous
+#ifdef DEBUG
                     uint64_t next_ppn = allocate_device_ppn();
                     ASSERT(next_ppn == device_ppn + page);
+#else
+                    allocate_device_ppn();
+#endif
                     device_vpn_to_ppn[vpn + page] = device_ppn + page;
                 }
 
