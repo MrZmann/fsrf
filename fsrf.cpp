@@ -17,6 +17,7 @@ using namespace std::chrono;
         exit(1);                                                                        \
     }
 
+#ifdef PERF
 #define TRACK(name)                                                      \
     {                                                                    \
         fsrf->cumulative_times[name] = std::chrono::nanoseconds::zero(); \
@@ -37,6 +38,12 @@ using namespace std::chrono;
         auto end = high_resolution_clock::now();                                   \
         fsrf->cumulative_times[name] += end - fsrf->last_start[name];              \
     }
+#else
+#define TRACK(name) {} 
+#define START(name) {} 
+#define END(name)   {} 
+#endif
+
 
 #define PAGE_SIZE 0x1000
 // Global instance for the SIGSEGV handler to use
@@ -101,6 +108,7 @@ FSRF::~FSRF()
 {
     abort = true;
     faultHandlerThread.join();
+#ifdef PERF
     for (auto it = cumulative_times.begin(); it != cumulative_times.end(); it++)
     {
         std::cout << it->first << "_MS, " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
@@ -109,6 +117,7 @@ FSRF::~FSRF()
     {
         std::cout << it->first << "_CALLS, " << it->second << "\n";
     }
+#endif
 }
 
 const char *FSRF::mode_str(MODE mode)

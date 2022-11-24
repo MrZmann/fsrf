@@ -5,6 +5,7 @@
 
 using namespace std::chrono;
 
+#ifdef PERF    
 #define TRACK(name)                                                \
     {                                                              \
         cumulative_times[name] = std::chrono::nanoseconds::zero(); \
@@ -25,6 +26,11 @@ using namespace std::chrono;
         auto end = high_resolution_clock::now();                       \
         cumulative_times[name] += end - last_start[name];              \
     }
+#else
+#define TRACK(name) {}
+#define START(name) {}
+#define END(name)   {}
+#endif
 
 FPGA::FPGA(uint64_t slot, uint64_t app_id, uint64_t base_tlb_addr) : app_id(app_id)
 {
@@ -102,6 +108,7 @@ out:
 
 FPGA::~FPGA()
 {
+#ifdef PERF
     for (auto it = cumulative_times.begin(); it != cumulative_times.end(); it++)
     {
         std::cout << it->first << "_MS, " << it->second.count() * microseconds::period::num / microseconds::period::den << "\n";
@@ -110,6 +117,7 @@ FPGA::~FPGA()
     {
         std::cout << it->first << "_CALLS, " << it->second << "\n";
     }
+#endif
 }
 
 int FPGA::read_app_reg(uint64_t app_id, uint64_t addr, uint64_t &value)
