@@ -3,9 +3,10 @@
 
 class Pagerank : public Bench
 {
-
-    uint64_t num_verts = 1000448;
-    uint64_t num_edges = 3105792;
+    // uint64_t num_verts = 1000448;
+    // uint64_t num_edges = 3105792;
+    uint64_t num_verts = 68863488;
+    uint64_t num_edges = 143415296;
     uint64_t vert_ptr;
     uint64_t edge_ptr;
     uint64_t input_ptr;
@@ -23,12 +24,13 @@ public:
         read_length = num_verts * (16 + 8) + num_edges * 8;
         write_length = num_verts * 8;
 
-        int fd = open("/home/centos/fsrf/inputs/webbase-1M/webbase-1M.bin", O_RDWR);
+        // int fd = open("/home/centos/fsrf/inputs/webbase-1M/webbase-1M.bin", O_RDWR);
+        int fd = open("/home/centos/fsrf/inputs/mawi_201512020030/mawi_201512020030.bin", O_RDWR | O_LARGEFILE);
         assert(fd != -1);
 
         if (mode == FSRF::MODE::INV_READ || mode == FSRF::MODE::INV_WRITE)
         {
-            read_ptr = mmap(0, read_length, PROT_READ, MAP_SHARED, fd, 0);
+            read_ptr = mmap(0, read_length, PROT_READ, MAP_SHARED | MAP_NORESERVE, fd, 0);
             // limitation - transparent version doesn't know when to copy back to host
             // to save changes to file
             // write_ptr = mmap(0, write_length, PROT_WRITE, MAP_PRIVATE, fd, read_length);
@@ -37,9 +39,15 @@ public:
         else
         {
             read_ptr = fsrf->fsrf_malloc(read_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
-            uint32_t length = read(fd, read_ptr, read_length);
+            uint64_t length = 0;
+            
+            while (length != read_length) {
+                length += read(fd, (void*) ((uint64_t)read_ptr + length), read_length - length);
+                std::cout << "len: " << length << "\n";
+            }
             if (length != read_length)
             {
+                std::cerr << "Intended length: " << length << ", desired length " << read_length << "\n";
                 std::cerr << "Problem reading\n";
                 exit(1);
             }
@@ -93,6 +101,6 @@ public:
         }
         if (verbose)
             std::cout << "out sum: " << output_sum << "\n";
-        assert(output_sum == 30250157791029322);
+        assert(output_sum == 36028887531252117);
     }
 };
