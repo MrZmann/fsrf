@@ -1,4 +1,4 @@
-#include <assert.h>
+#include <ASSERT.h>
 #include <chrono>
 #include <iostream>
 #include <sys/mman.h>
@@ -7,15 +7,28 @@
 
 using namespace std::chrono;
 
-#define DBG(x)       \
-    if (fsrf->debug) \
-    std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
-
 #define ERR(x)                                                                          \
     {                                                                                   \
         std::cerr << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl; \
         exit(1);                                                                        \
     }
+
+#ifdef DEBUG
+#define DBG(x) std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
+
+#define ASSERT(b)        \
+    {                    \
+        if (fsrf->debug) \
+            assert(b);   \
+    }
+#else
+#define DBG(x) \
+    {          \
+    }
+#define ASSERT(b) \
+    {             \
+    }
+#endif
 
 #ifdef PERF
 #define TRACK(name)                                                      \
@@ -26,24 +39,29 @@ using namespace std::chrono;
 
 #define START(name)                                                                \
     {                                                                              \
-        assert(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end()); \
+        ASSERT(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end()); \
         fsrf->last_start[name] = high_resolution_clock::now();                     \
         fsrf->num_calls[name] += 1;                                                \
     }
 
 #define END(name)                                                                  \
     {                                                                              \
-        assert(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end()); \
-        assert(fsrf->last_start.find(name) != fsrf->last_start.end());             \
+        ASSERT(fsrf->cumulative_times.find(name) != fsrf->cumulative_times.end()); \
+        ASSERT(fsrf->last_start.find(name) != fsrf->last_start.end());             \
         auto end = high_resolution_clock::now();                                   \
         fsrf->cumulative_times[name] += end - fsrf->last_start[name];              \
     }
 #else
-#define TRACK(name) {} 
-#define START(name) {} 
-#define END(name)   {} 
+#define TRACK(name) \
+    {               \
+    }
+#define START(name) \
+    {               \
+    }
+#define END(name) \
+    {             \
+    }
 #endif
-
 
 #define PAGE_SIZE 0x1000
 // Global instance for the SIGSEGV handler to use
@@ -99,9 +117,9 @@ FSRF::FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size) : debug(debug
 
     next_free_page = phys_base >> 12;
 
-    assert(mmap_dma_size % 0x1000 == 0);
+    ASSERT(mmap_dma_size % 0x1000 == 0);
 
-    //flush_tlb();
+    // flush_tlb();
 }
 
 FSRF::~FSRF()
@@ -147,7 +165,7 @@ void *FSRF::fsrf_malloc(uint64_t orig_length, uint64_t host_permissions, uint64_
 {
     const std::lock_guard<std::mutex> guard(lock);
 
-    assert(mode == MMAP);
+    ASSERT(mode == MMAP);
     uint64_t length = orig_length;
     DBG("Length " << (void *)length);
     if (length % mmap_dma_size != 0)
@@ -165,8 +183,8 @@ void *FSRF::fsrf_malloc(uint64_t orig_length, uint64_t host_permissions, uint64_
     }
 
     DBG("mmap returned pointer: " << ptr);
-    assert(length % PAGE_SIZE == 0);
-    assert(length % mmap_dma_size == 0);
+    ASSERT(length % PAGE_SIZE == 0);
+    ASSERT(length % mmap_dma_size == 0);
 
     uint64_t toReturn = (uint64_t)ptr;
 
@@ -176,10 +194,10 @@ void *FSRF::fsrf_malloc(uint64_t orig_length, uint64_t host_permissions, uint64_
     }
 
     DBG("Final mmap range: " << (void *)toReturn << " - " << (void *)(((uint64_t)ptr) + length + mmap_dma_size));
-    assert(toReturn % mmap_dma_size == 0);
-    assert(toReturn + orig_length <= ((uint64_t)ptr) + length + mmap_dma_size);
-    assert(((uint64_t)toReturn + length) % mmap_dma_size == 0);
-    assert(toReturn >= (uint64_t)ptr);
+    ASSERT(toReturn % mmap_dma_size == 0);
+    ASSERT(toReturn + orig_length <= ((uint64_t)ptr) + length + mmap_dma_size);
+    ASSERT(((uint64_t)toReturn + length) % mmap_dma_size == 0);
+    ASSERT(toReturn >= (uint64_t)ptr);
 
     VME vme{toReturn, length, device_permissions, nullptr};
     vmes[toReturn] = vme;
@@ -188,7 +206,7 @@ void *FSRF::fsrf_malloc(uint64_t orig_length, uint64_t host_permissions, uint64_
 
 void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
 {
-    assert(mode == MMAP);
+    ASSERT(mode == MMAP);
     const std::lock_guard<std::mutex> guard(lock);
     uint64_t low = (uint64_t)addr;
     uint64_t high = low + (uint64_t)length;
@@ -203,8 +221,8 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
             // unmap from addr to addr + size
             for (uint64_t vaddr = vme.addr; vaddr < vme.addr + vme.size; vaddr += mmap_dma_size)
             {
-                assert(vaddr % mmap_dma_size == 0);
-                assert(vme.size % mmap_dma_size == 0);
+                ASSERT(vaddr % mmap_dma_size == 0);
+                ASSERT(vme.size % mmap_dma_size == 0);
 
                 // this page was never put on the device
                 if (device_vpn_to_ppn.find(vaddr >> 12) == device_vpn_to_ppn.end())
@@ -213,7 +231,7 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
                 for (uint64_t curr = vaddr; curr < vaddr + mmap_dma_size; curr += 0x1000)
                 {
                     uint64_t vpn = curr >> 12;
-                    assert(device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end());
+                    ASSERT(device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end());
                     write_tlb(vpn, device_vpn_to_ppn[vpn], false, false, false, false);
                 }
                 // timed_mprotect((void *)vaddr, mmap_dma_size, PROT_READ | PROT_WRITE);
@@ -221,7 +239,7 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
                 DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
 
                 // dma from device to host
-                assert(device_vpn_to_ppn.find(vaddr >> 12) != device_vpn_to_ppn.end());
+                ASSERT(device_vpn_to_ppn.find(vaddr >> 12) != device_vpn_to_ppn.end());
                 fpga.dma_read((void *)vaddr, device_vpn_to_ppn[vaddr >> 12] << 12, mmap_dma_size);
 
                 DBG("Finished dma read");
@@ -247,7 +265,7 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
 
 void FSRF::fsrf_free(uint64_t *addr)
 {
-    assert(mode == MMAP);
+    ASSERT(mode == MMAP);
     auto it = vmes.begin();
     while (it != vmes.end())
     {
@@ -294,7 +312,7 @@ uint64_t FSRF::allocate_device_ppn()
 void FSRF::free_device_vpn(uint64_t vpn)
 {
     // allocated_device_ppns.erase(device_vpn_to_ppn[vpn]);
-    assert(device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end());
+    ASSERT(device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end());
     device_vpn_to_ppn.erase(vpn);
 }
 
@@ -330,12 +348,12 @@ void FSRF::write_tlb(uint64_t vpn,
                      uint64_t present,
                      uint64_t huge)
 {
-    assert(!huge);
+    ASSERT(!huge);
 
     // Max of 36 vpn bits
-    assert(vpn < ((uint64_t)1 << 36));
+    ASSERT(vpn < ((uint64_t)1 << 36));
     // Max of 24 ppn bits
-    assert(ppn < (1 << 24));
+    ASSERT(ppn < (1 << 24));
 
     uint64_t tlb_addr = dram_tlb_addr(vpn);
     uint64_t entry = (vpn << 28) | (ppn << 4) | (writeable << 2) | (readable << 1) | present;
@@ -398,10 +416,10 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
         // If we are reading, we need to make it readable on the host and device
         if (read)
         {
-    START("MPROTECT_RW_TO_R");
+            START("MPROTECT_RW_TO_R");
             timed_mprotect((void *)vaddr, bytes, PROT_READ);
             // it is already readonly on the host at this point
-    END("MPROTECT_RW_TO_R");
+            END("MPROTECT_RW_TO_R");
 
             // find a place to put the data
             uint64_t device_ppn = allocate_device_ppn();
@@ -461,7 +479,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
             return;
         }
 
-        assert(mode == MODE::MMAP);
+        ASSERT(mode == MODE::MMAP);
         uint64_t device_ppn = -1;
         VME vme;
 
@@ -479,8 +497,8 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
             // This is a valid mmapped address
             if (vaddr >= vme.addr && vaddr < vme.addr + vme.size)
             {
-                assert(vme.addr % mmap_dma_size == 0);
-                assert(vme.size % mmap_dma_size == 0);
+                ASSERT(vme.addr % mmap_dma_size == 0);
+                ASSERT(vme.size % mmap_dma_size == 0);
                 DBG("Found suitable VME");
                 device_ppn = allocate_device_ppn();
                 device_vpn_to_ppn[vpn] = device_ppn;
@@ -488,7 +506,7 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
                 {
                     // allocations guaranteed to be contiguous
                     uint64_t next_ppn = allocate_device_ppn();
-                    assert(next_ppn == device_ppn + page);
+                    ASSERT(next_ppn == device_ppn + page);
                     device_vpn_to_ppn[vpn + page] = device_ppn + page;
                 }
 
@@ -500,12 +518,12 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
                 // for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
                 for (uint64_t page = 0; page < mmap_dma_size >> 12; ++page)
                 {
-                    assert(device_vpn_to_ppn[vpn + page] == device_ppn + page);
+                    ASSERT(device_vpn_to_ppn[vpn + page] == device_ppn + page);
                     write_tlb(vpn + page, device_ppn + page, /*writeable*/ true, true, true, false);
                 }
 
                 fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
-                assert(device_vpn_to_ppn.find(fault_vpn) != device_vpn_to_ppn.end());
+                ASSERT(device_vpn_to_ppn.find(fault_vpn) != device_vpn_to_ppn.end());
                 respond_tlb(device_vpn_to_ppn[fault_vpn], true);
                 return;
             }
@@ -522,7 +540,7 @@ void FSRF::device_fault_listener()
 
         uint64_t fault = read_tlb_fault();
 
-        assert(fault != (uint64_t)-1);
+        ASSERT(fault != (uint64_t)-1);
         if (!(fault & 1))
         {
             num_credits = fault >> 57;
@@ -553,7 +571,7 @@ void FSRF::device_fault_listener()
 
 void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 {
-    assert(sig == SIGSEGV);
+    ASSERT(sig == SIGSEGV);
     uint64_t missAddress = (uint64_t)info->si_addr;
     uint64_t err = ((ucontext_t *)ucontext)->uc_mcontext.gregs[REG_ERR];
     bool write_fault = !(err & 0x2);
@@ -592,9 +610,9 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
             // set to readonly on TLB
             fsrf->write_tlb(vpn, fsrf->device_vpn_to_ppn[vpn], false, true, true, false);
 
-    START("MPROTECT_NONE_TO_R");
+            START("MPROTECT_NONE_TO_R");
             fsrf->timed_mprotect((void *)vaddr, 1 << 12, PROT_READ);
-    END("MPROTECT_NONE_TO_R");
+            END("MPROTECT_NONE_TO_R");
 
             // dma from device to host
             // we have to dma because the device has written to this page
@@ -615,21 +633,26 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
 
 int FSRF::timed_mprotect(void *addr, size_t len, int prot)
 {
-    //START("MPROTECT");
-    if(prot == PROT_NONE) {
+    // START("MPROTECT");
+    if (prot == PROT_NONE)
+    {
         START("MPROTECT_NONE");
-    } else if (prot == (PROT_READ | PROT_WRITE)) {
+    }
+    else if (prot == (PROT_READ | PROT_WRITE))
+    {
         START("MPROTECT_NONE_TO_RW");
     }
 
     int res = mprotect(addr, len, prot);
-    if(prot == PROT_NONE) {
+    if (prot == PROT_NONE)
+    {
         END("MPROTECT_NONE");
-    } else if (prot == (PROT_READ | PROT_WRITE)) {
+    }
+    else if (prot == (PROT_READ | PROT_WRITE))
+    {
         END("MPROTECT_NONE_TO_RW");
     }
 
-
-    //END("MPROTECT");
+    // END("MPROTECT");
     return res;
 }

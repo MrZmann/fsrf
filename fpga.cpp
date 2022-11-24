@@ -5,7 +5,24 @@
 
 using namespace std::chrono;
 
-#ifdef PERF    
+#ifdef DEBUG
+#define DBG(x) std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
+
+#define ASSERT(b)        \
+    {                    \
+        if (fsrf->debug) \
+            assert(b);   \
+    }
+#else
+#define DBG(x) \
+    {          \
+    }
+#define ASSERT(b) \
+    {             \
+    }
+#endif
+
+#ifdef PERF
 #define TRACK(name)                                                \
     {                                                              \
         cumulative_times[name] = std::chrono::nanoseconds::zero(); \
@@ -14,22 +31,28 @@ using namespace std::chrono;
 
 #define START(name)                                                    \
     {                                                                  \
-        assert(cumulative_times.find(name) != cumulative_times.end()); \
+        ASSERT(cumulative_times.find(name) != cumulative_times.end()); \
         last_start[name] = high_resolution_clock::now();               \
         num_calls[name] += 1;                                          \
     }
 
 #define END(name)                                                      \
     {                                                                  \
-        assert(cumulative_times.find(name) != cumulative_times.end()); \
-        assert(last_start.find(name) != last_start.end());             \
+        ASSERT(cumulative_times.find(name) != cumulative_times.end()); \
+        ASSERT(last_start.find(name) != last_start.end());             \
         auto end = high_resolution_clock::now();                       \
         cumulative_times[name] += end - last_start[name];              \
     }
 #else
-#define TRACK(name) {}
-#define START(name) {}
-#define END(name)   {}
+#define TRACK(name) \
+    {               \
+    }
+#define START(name) \
+    {               \
+    }
+#define END(name) \
+    {             \
+    }
 #endif
 
 FPGA::FPGA(uint64_t slot, uint64_t app_id, uint64_t base_tlb_addr) : app_id(app_id)
@@ -191,8 +214,8 @@ uint64_t FPGA::virt_to_phys(uint64_t virt_addr)
 int FPGA::dma_read(void *buf, uint64_t addr, uint64_t bytes)
 {
     START("DMA_READ");
-    assert(addr % 0x1000 == 0);
-    assert(bytes % 0x1000 == 0);
+    ASSERT(addr % 0x1000 == 0);
+    ASSERT(bytes % 0x1000 == 0);
     uint64_t num_pages = bytes / 0x1000;
     dma_wrapper(true, num_pages, addr / 0x1000, app_id);
     std::memcpy(buf, xfer_buf, bytes);
@@ -204,8 +227,8 @@ int FPGA::dma_read(void *buf, uint64_t addr, uint64_t bytes)
 int FPGA::dma_write(void *buf, uint64_t addr, uint64_t bytes)
 {
     START("DMA_WRITE");
-    assert(addr % 0x1000 == 0);
-    assert(bytes % 0x1000 == 0);
+    ASSERT(addr % 0x1000 == 0);
+    ASSERT(bytes % 0x1000 == 0);
     uint64_t num_pages = bytes / 0x1000;
     std::memcpy(xfer_buf, buf, bytes);
     dma_wrapper(false, num_pages, addr / 0x1000, app_id);
@@ -216,7 +239,7 @@ int FPGA::dma_write(void *buf, uint64_t addr, uint64_t bytes)
 
 void FPGA::dma_wrapper(bool from_device, uint64_t num_pages, uint64_t ppn, uint64_t app_id)
 {
-    assert(num_pages <= 512);
+    ASSERT(num_pages <= 512);
 
     if (send_data)
     {

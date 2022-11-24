@@ -20,6 +20,8 @@ bench:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) fpga.cpp fsrf.cpp apps/main.cpp -o bench.out
 perf: 
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) -DPERF fpga.cpp fsrf.cpp apps/main.cpp -o bench.out
+debug: 
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(SRC) -DDEBUG fpga.cpp fsrf.cpp apps/main.cpp -o bench.out
 page:
 	@sudo fpga-load-local-image -D -S 0 -I agfi-0d3be5dce212b307f
 multi_page:
