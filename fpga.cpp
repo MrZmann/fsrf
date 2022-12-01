@@ -60,6 +60,7 @@ FPGA::FPGA(uint64_t slot, uint64_t app_id, uint64_t base_tlb_addr) : app_id(app_
     TRACK("ATTACH_PCI");
     TRACK("HUGE_PAGE");
     TRACK("ZERO_TLB");
+    TRACK("DMA_READ_MEMCPY");
 
     int rc, fd;
     int xfer_buf_size = 2 << 20;
@@ -213,7 +214,9 @@ int FPGA::dma_read(void *buf, uint64_t addr, uint64_t bytes)
     ASSERT(bytes % 0x1000 == 0);
     uint64_t num_pages = bytes / 0x1000;
     dma_wrapper(true, num_pages, addr / 0x1000, app_id);
+    START("DMA_READ_MEMCPY");
     std::memcpy(buf, xfer_buf, bytes);
+    END("DMA_READ_MEMCPY");
     std::memset(xfer_buf, 0, bytes);
     END("DMA_READ");
     return 0;

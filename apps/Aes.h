@@ -3,7 +3,7 @@
 
 class Aes : public Bench
 {
-    const int size = 1073741824;
+    const int size = 1073741824 / 2;
     void *src;
     void *dest;
 
@@ -85,7 +85,8 @@ public:
         if (verbose)
             std::cout << "out sum: " << output_sum << "\n";
 
-        assert(output_sum == 8785770774558841555);
+        // assert(output_sum == 8785770774558841555);
+        assert(output_sum == 7075813084211175919);
 
         return;
     }

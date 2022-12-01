@@ -51,7 +51,7 @@ public:
         assert(ab == 5116089179561787392); 
         uint64_t cd = fsrf->cntrlreg_read(0x8);
         assert(cd == 1945555042127839232);
-        if (true || verbose)
+        if (verbose)
         {
             std::cout << "ab: " << ab << "\n";
             std::cout << "cd: " << cd << "\n";

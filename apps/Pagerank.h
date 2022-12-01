@@ -30,7 +30,7 @@ public:
 
         if (mode == FSRF::MODE::INV_READ || mode == FSRF::MODE::INV_WRITE)
         {
-            read_ptr = mmap(0, read_length, PROT_READ, MAP_SHARED | MAP_NORESERVE, fd, 0);
+            read_ptr = mmap(0, read_length, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_NORESERVE, fd, 0);
             // limitation - transparent version doesn't know when to copy back to host
             // to save changes to file
             // write_ptr = mmap(0, write_length, PROT_WRITE, MAP_PRIVATE, fd, read_length);
@@ -94,13 +94,16 @@ public:
         {
             fsrf->sync_device_to_host(output, write_length);
         }
-
-        for (uint64_t i = 0; i < write_length / sizeof(uint64_t); i += 0x1000 / sizeof(uint64_t))
+        
+        else 
         {
-            output_sum += output[i];
+            for (uint64_t i = 0; i < write_length / sizeof(uint64_t); i += 0x1000 / sizeof(uint64_t))
+            {
+                output_sum += output[i];
+            }
+            if (verbose)
+                std::cout << "out sum: " << output_sum << "\n";
+            assert(output_sum == 36028887531252117);
         }
-        if (verbose)
-            std::cout << "out sum: " << output_sum << "\n";
-        assert(output_sum == 36028887531252117);
     }
 };

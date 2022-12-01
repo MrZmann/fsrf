@@ -643,6 +643,7 @@ int FSRF::timed_mprotect(void *addr, size_t len, int prot)
     }
 
     int res = mprotect(addr, len, prot);
+    assert(res == 0);
     if (prot == PROT_NONE)
     {
         END("MPROTECT_NONE");
