@@ -49,8 +49,9 @@ public:
         if (mode == FSRF::MODE::MMAP)
         {
             addr = fsrf->fsrf_malloc(length0, PROT_READ, flags);
+            fsrf->sync_host_to_device(addr);
         }
-        else if(mode == FSRF::MODE::MANAGED)
+        else if (mode == FSRF::MODE::MANAGED)
         {
             addr = fsrf->fsrf_malloc_managed(length0, PROT_READ, flags);
         }
@@ -73,8 +74,9 @@ public:
         if (mode == FSRF::MODE::MMAP)
         {
             addr = fsrf->fsrf_malloc(length1, PROT_READ, flags);
+            fsrf->sync_host_to_device(addr);
         }
-        else if(mode == FSRF::MODE::MANAGED)
+        else if (mode == FSRF::MODE::MANAGED)
         {
             addr = fsrf->fsrf_malloc_managed(length1, PROT_READ, flags);
         }
@@ -135,13 +137,12 @@ public:
             val = fsrf->cntrlreg_read(0x48);
         }
         uint64_t num_credits = 1;
-        
+
         while (num_credits)
         {
             num_credits = fsrf->get_num_credits();
-            //std::cout << "Waiting " << num_credits << "\n";
+            // std::cout << "Waiting " << num_credits << "\n";
         }
-
     }
 
     virtual void copy_back_output()
@@ -159,6 +160,6 @@ public:
             output_sum += output[i];
         }
         if (verbose)
-            std::cout << "out sum: " << output_sum << "\n"; 
+            std::cout << "out sum: " << output_sum << "\n";
     }
 };

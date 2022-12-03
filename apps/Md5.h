@@ -19,6 +19,7 @@ public:
             break;
         case FSRF::MODE::MMAP:
             buf = fsrf->fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+            fsrf->sync_host_to_device(buf);
             break;
         case FSRF::MODE::MANAGED:
             buf = fsrf->fsrf_malloc_managed(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
@@ -51,7 +52,7 @@ public:
     virtual void copy_back_output()
     {
         uint64_t ab = fsrf->cntrlreg_read(0x0);
-        assert(ab == 5116089179561787392); 
+        assert(ab == 5116089179561787392);
         uint64_t cd = fsrf->cntrlreg_read(0x8);
         assert(cd == 1945555042127839232);
         if (verbose)

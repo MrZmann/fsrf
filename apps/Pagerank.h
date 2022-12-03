@@ -38,14 +38,15 @@ public:
         }
         else
         {
-            if(mode == FSRF::MODE::MMAP)
+            if (mode == FSRF::MODE::MMAP)
                 read_ptr = fsrf->fsrf_malloc(read_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
-            else    
+            else
                 read_ptr = fsrf->fsrf_malloc_managed(read_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
             uint64_t length = 0;
-            
-            while (length != read_length) {
-                length += read(fd, (void*) ((uint64_t)read_ptr + length), read_length - length);
+
+            while (length != read_length)
+            {
+                length += read(fd, (void *)((uint64_t)read_ptr + length), read_length - length);
                 std::cout << "len: " << length << "\n";
             }
             if (length != read_length)
@@ -54,7 +55,11 @@ public:
                 std::cerr << "Problem reading\n";
                 exit(1);
             }
-            if(mode == FSRF::MODE::MMAP)
+
+            if (mode == FSRF::MODE::MMAP)
+                fsrf->sync_host_to_device(read_ptr);
+
+            if (mode == FSRF::MODE::MMAP)
                 write_ptr = fsrf->fsrf_malloc(write_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
             else
                 write_ptr = fsrf->fsrf_malloc_managed(write_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
@@ -100,8 +105,8 @@ public:
         {
             fsrf->sync_device_to_host(output, write_length);
         }
-        
-        else 
+
+        else
         {
             for (uint64_t i = 0; i < write_length / sizeof(uint64_t); i += 0x1000 / sizeof(uint64_t))
             {

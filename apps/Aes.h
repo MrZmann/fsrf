@@ -21,6 +21,7 @@ public:
             break;
         case FSRF::MODE::MMAP:
             src = fsrf->fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+            fsrf->sync_host_to_device(src);
             dest = fsrf->fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
             break;
         case FSRF::MODE::MANAGED:
@@ -32,7 +33,8 @@ public:
             exit(1);
         }
 
-        if(src == MAP_FAILED || dest == MAP_FAILED){
+        if (src == MAP_FAILED || dest == MAP_FAILED)
+        {
             std::cerr << "allocation failed\n";
             exit(1);
         }
@@ -61,19 +63,19 @@ public:
         {
             val = fsrf->cntrlreg_read(0x38);
         }
-        
+
         uint64_t num_credits = 1;
-        
+
         while (num_credits)
         {
             num_credits = fsrf->get_num_credits();
-            //std::cout << "Waiting " << num_credits << "\n";
+            // std::cout << "Waiting " << num_credits << "\n";
         }
     }
 
     virtual void copy_back_output()
     {
-           
+
         uint64_t *output = (uint64_t *)dest;
         uint64_t output_sum = 0;
 
