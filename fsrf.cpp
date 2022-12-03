@@ -242,83 +242,62 @@ void *FSRF::fsrf_malloc(uint64_t orig_length, uint64_t host_permissions, uint64_
     VME vme{toReturn, length, device_permissions, nullptr};
     vmes[toReturn] = vme;
 
-    uint64_t device_ppn = allocate_device_ppn();
-    device_vpn_to_ppn[vpn] = device_ppn;
-    for (uint64_t page = 1; page < length >> 12; ++page)
+    uint64_t vpn = toReturn >> 12;
+    for (uint64_t page = 0; page < length >> 12; ++page)
     {
+        uint64_t device_ppn = allocate_device_ppn();
         // allocations guaranteed to be contiguous
-#ifdef DEBUG
-        uint64_t next_ppn = allocate_device_ppn();
-        ASSERT(next_ppn == device_ppn + page);
-#else
-        allocate_device_ppn();
-#endif
-        device_vpn_to_ppn[vpn + page] = device_ppn + page;
-    }
-
-    // fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
-
-    // write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
-    // respond_tlb(device_ppn, true);
-
-    // for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
-    for (uint64_t page = 0; page < orig_length >> 12; ++page)
-    {
-        ASSERT(device_vpn_to_ppn[vpn + page] == device_ppn + page);
-        write_tlb(vpn + page, device_ppn + page, /*writeable*/ true, true, true, false);
+        device_vpn_to_ppn[vpn + page] = device_ppn;
+        write_tlb(vpn + page, device_ppn, /*writeable*/ true, true, true, false);
     }
 
     return (void *)toReturn;
 }
 
-void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
+// Sync entire VME containing addr to host 
+void FSRF::sync_device_to_host(uint64_t *addr)
 {
     ASSERT(mode == MMAP);
     const std::lock_guard<std::mutex> guard(lock);
-    uint64_t low = (uint64_t)addr;
-    uint64_t high = low + (uint64_t)length;
     auto it = vmes.begin();
     while (it != vmes.end())
     {
         VME vme = it->second;
         // intervals overlap
-        if ((low >= vme.addr && low < (vme.addr + vme.size)) ||
-            (high > vme.addr && high < (vme.addr + vme.size)))
+        if (((uint64_t) addr >= vme.addr && (uint64_t) addr < (vme.addr + vme.size)))
         {
+            DBG("VME addr: " << (void*) vme.addr << "\n");
             // unmap from addr to addr + size
             for (uint64_t vaddr = vme.addr; vaddr < vme.addr + vme.size; vaddr += mmap_dma_size)
             {
                 ASSERT(vaddr % mmap_dma_size == 0);
                 ASSERT(vme.size % mmap_dma_size == 0);
 
-                // this page was never put on the device
-                if (device_vpn_to_ppn.find(vaddr >> 12) == device_vpn_to_ppn.end())
-                    continue;
+                ASSERT(device_vpn_to_ppn.find(vaddr >> 12) != device_vpn_to_ppn.end());
 
-                // timed_mprotect((void *)vaddr, mmap_dma_size, PROT_READ | PROT_WRITE);
-
-                DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
+                // DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
 
                 // dma from device to host
                 ASSERT(device_vpn_to_ppn.find(vaddr >> 12) != device_vpn_to_ppn.end());
                 fpga.dma_read((void *)vaddr, device_vpn_to_ppn[vaddr >> 12] << 12, mmap_dma_size);
 
-                DBG("Finished dma read");
+                // DBG("Finished dma read");
             }
+            return;
         }
         else
         {
             ++it;
         }
     }
+    ERR("Invalid sync");
 }
 
 // Sync entire VME containing addr to device
-void FSRF::sync_host_to_device(uint64_t *addr)
+void FSRF::sync_host_to_device(void *addr)
 {
     ASSERT(mode == MMAP);
     const std::lock_guard<std::mutex> guard(lock);
-    uint64_t low = (uint64_t)addr;
     auto it = vmes.begin();
     while (it != vmes.end())
     {
@@ -620,68 +599,6 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
     else if (mode == MMAP)
     {
         ERR("Device should not fault for MMAP mode");
-        // and make it writeable on the device
-        if (device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end())
-        {
-            DBG("Data is already there!");
-            std::cout << "data already here\n";
-            respond_tlb(device_vpn_to_ppn[vpn], true);
-            return;
-        }
-
-        uint64_t device_ppn = -1;
-        VME vme;
-
-        uint64_t fault_vpn = vaddr >> 12;
-
-        // align vaddr / vpn to mmap_dma_size
-        vaddr -= vaddr % mmap_dma_size;
-        vpn = vaddr >> 12;
-
-        DBG("Aligned vaddr: " << (void *)vaddr);
-
-        for (auto it = vmes.begin(); it != vmes.end(); ++it)
-        {
-            vme = it->second;
-            // This is a valid mmapped address
-            if (vaddr >= vme.addr && vaddr < vme.addr + vme.size)
-            {
-                ASSERT(vme.addr % mmap_dma_size == 0);
-                ASSERT(vme.size % mmap_dma_size == 0);
-                DBG("Found suitable VME");
-                device_ppn = allocate_device_ppn();
-                device_vpn_to_ppn[vpn] = device_ppn;
-                for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
-                {
-                    // allocations guaranteed to be contiguous
-#ifdef DEBUG
-                    uint64_t next_ppn = allocate_device_ppn();
-                    ASSERT(next_ppn == device_ppn + page);
-#else
-                    allocate_device_ppn();
-#endif
-                    device_vpn_to_ppn[vpn + page] = device_ppn + page;
-                }
-
-                // fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
-
-                // write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
-                // respond_tlb(device_ppn, true);
-
-                // for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
-                for (uint64_t page = 0; page < mmap_dma_size >> 12; ++page)
-                {
-                    ASSERT(device_vpn_to_ppn[vpn + page] == device_ppn + page);
-                    write_tlb(vpn + page, device_ppn + page, /*writeable*/ true, true, true, false);
-                }
-
-                fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
-                ASSERT(device_vpn_to_ppn.find(fault_vpn) != device_vpn_to_ppn.end());
-                respond_tlb(device_vpn_to_ppn[fault_vpn], true);
-                return;
-            }
-        }
-        ERR("Invalid device access");
     }
     else
     {

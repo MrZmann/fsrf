@@ -81,7 +81,7 @@ public:
 
         if (mode == FSRF::MODE::MMAP)
         {
-            fsrf->sync_device_to_host(output, size);
+            fsrf->sync_device_to_host(output);
         }
 
         for (uint64_t i = 0; i < size / sizeof(uint64_t); i += 0x1000 / sizeof(uint64_t))

@@ -44,8 +44,8 @@ public:
 
     void *fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t device_permissions);
     void *fsrf_malloc_managed(uint64_t length, uint64_t host_permissions, uint64_t device_permissions);
-    void sync_device_to_host(uint64_t *addr, size_t length);
-    void sync_host_to_device(uint64_t *addr);
+    void sync_device_to_host(uint64_t *addr);
+    void sync_host_to_device(void *addr);
 
     void fsrf_free(uint64_t *addr);
 

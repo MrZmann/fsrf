@@ -103,7 +103,7 @@ public:
 
         if (mode == FSRF::MODE::MMAP)
         {
-            fsrf->sync_device_to_host(output, write_length);
+            fsrf->sync_device_to_host(output);
         }
 
         else
