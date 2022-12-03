@@ -19,7 +19,7 @@ public:
             break;
         case FSRF::MODE::MMAP:
             buf = fsrf->fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
-            fsrf->sync_host_to_device(buf);
+
             break;
         case FSRF::MODE::MANAGED:
             buf = fsrf->fsrf_malloc_managed(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
@@ -33,15 +33,15 @@ public:
             printf("Oh dear, something went wrong with mmap: \n\t%s\n", strerror(errno));
     }
 
-    virtual void start_fpga()
+    virtual void wait_for_fpga()
     {
+        if (mode == FSRF::MODE::MMAP)
+            fsrf->sync_host_to_device(buf);
+
         fsrf->cntrlreg_write(0x10, (uint64_t)buf); // src_addr
         fsrf->cntrlreg_write(0x18, 8);             // rd_credits
         fsrf->cntrlreg_write(0x20, size / 64);     // num 64 byte words
-    }
 
-    virtual void wait_for_fpga()
-    {
         uint64_t val = 0;
         while (val != size / 64)
         {

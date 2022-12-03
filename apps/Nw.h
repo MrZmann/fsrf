@@ -49,7 +49,6 @@ public:
         if (mode == FSRF::MODE::MMAP)
         {
             addr = fsrf->fsrf_malloc(length0, PROT_READ, flags);
-            fsrf->sync_host_to_device(addr);
         }
         else if (mode == FSRF::MODE::MANAGED)
         {
@@ -74,7 +73,6 @@ public:
         if (mode == FSRF::MODE::MMAP)
         {
             addr = fsrf->fsrf_malloc(length1, PROT_READ, flags);
-            fsrf->sync_host_to_device(addr);
         }
         else if (mode == FSRF::MODE::MANAGED)
         {
@@ -117,8 +115,13 @@ public:
         sc_addr = (uint64_t)addr;
     }
 
-    virtual void start_fpga()
+    virtual void wait_for_fpga()
     {
+        if (mode == FSRF::MODE::MMAP)
+        {
+            frsf->sync_host_to_device(s0_addr);
+            frsf->sync_host_to_device(s1_addr);
+        }
         fsrf->cntrlreg_write(0x00, s0_addr);
         fsrf->cntrlreg_write(0x08, s0_words);
         fsrf->cntrlreg_write(0x10, s1_addr);
@@ -127,10 +130,7 @@ public:
         fsrf->cntrlreg_write(0x28, sc_count);
         fsrf->cntrlreg_write(0x30, sc_addr);
         fsrf->cntrlreg_write(0x38, sc_words);
-    }
 
-    virtual void wait_for_fpga()
-    {
         uint64_t val = 1;
         while (val != 0)
         {

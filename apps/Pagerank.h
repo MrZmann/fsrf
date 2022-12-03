@@ -57,9 +57,6 @@ public:
             }
 
             if (mode == FSRF::MODE::MMAP)
-                fsrf->sync_host_to_device(read_ptr);
-
-            if (mode == FSRF::MODE::MMAP)
                 write_ptr = fsrf->fsrf_malloc(write_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
             else
                 write_ptr = fsrf->fsrf_malloc_managed(write_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
@@ -74,8 +71,10 @@ public:
         output_ptr = (uint64_t)write_ptr;
     }
 
-    virtual void start_fpga()
+    virtual void wait_for_fpga()
     {
+        if (mode == FSRF::MODE::MMAP)
+            fsrf->sync_host_to_device(read_ptr);
         fsrf->cntrlreg_write(0x20, num_verts);
         fsrf->cntrlreg_write(0x30, num_edges);
         fsrf->cntrlreg_write(0x40, vert_ptr);
@@ -84,10 +83,6 @@ public:
         fsrf->cntrlreg_write(0x70, output_ptr);
 
         fsrf->cntrlreg_write(0x00, 0x1);
-    }
-
-    virtual void wait_for_fpga()
-    {
         bool done = false;
         while (!done)
         {

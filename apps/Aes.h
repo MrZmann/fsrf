@@ -21,7 +21,6 @@ public:
             break;
         case FSRF::MODE::MMAP:
             src = fsrf->fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
-            fsrf->sync_host_to_device(src);
             dest = fsrf->fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
             break;
         case FSRF::MODE::MANAGED:
@@ -40,8 +39,11 @@ public:
         }
     }
 
-    virtual void start_fpga()
+    virtual void wait_for_fpga()
     {
+        if (mode == FSRF::MODE::MMAP)
+            fsrf->sync_host_to_device(src);
+
         fsrf->cntrlreg_write(0x00, 1);
         fsrf->cntrlreg_write(0x08, 2);
         fsrf->cntrlreg_write(0x10, 3);
@@ -54,10 +56,7 @@ public:
 
         // write this last because it starts the app
         fsrf->cntrlreg_write(0x30, size / 64); // num words
-    }
 
-    virtual void wait_for_fpga()
-    {
         uint64_t val = 1;
         while (val != 0)
         {

@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #include "arg_parse.h"
 #include "fsrf.h"
 
@@ -27,7 +27,6 @@ public:
     }
 
     virtual void setup() = 0;
-    virtual void start_fpga() = 0;
     virtual void wait_for_fpga() = 0;
     virtual void copy_back_output() = 0;
 };

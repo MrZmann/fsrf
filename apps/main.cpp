@@ -54,8 +54,6 @@ int main(int argc, char *argv[])
     end = high_resolution_clock::now();
     // auto setup_time = end - start;
 
-    bench->start_fpga();
-
     start = high_resolution_clock::now();
     bench->wait_for_fpga();
     end = high_resolution_clock::now();
@@ -72,11 +70,11 @@ int main(int argc, char *argv[])
     std::cout << "FPGA_EXECUTION, " << fpga_execution_time.count() * microseconds::period::num / microseconds::period::den << "\n";
     std::cout << "E2E, " << end_to_end_time.count() * microseconds::period::num / microseconds::period::den << "\n";
 
-/*
-    std::cout << "FSRF_CONSTRUCTOR," << construct_fsrf_time.count() * microseconds::period::num / microseconds::period::den << "\n";
-    std::cout << "SETUP, " << setup_time.count() * microseconds::period::num / microseconds::period::den << "\n";
-    std::cout << "COPY_BACK, " << copy_back_time.count() * microseconds::period::num / microseconds::period::den << "\n";
-*/
+    /*
+        std::cout << "FSRF_CONSTRUCTOR," << construct_fsrf_time.count() * microseconds::period::num / microseconds::period::den << "\n";
+        std::cout << "SETUP, " << setup_time.count() * microseconds::period::num / microseconds::period::den << "\n";
+        std::cout << "COPY_BACK, " << copy_back_time.count() * microseconds::period::num / microseconds::period::den << "\n";
+    */
 
     delete bench;
 }
