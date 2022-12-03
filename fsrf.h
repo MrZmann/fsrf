@@ -94,7 +94,7 @@ private:
     respond_tlb(uint64_t ppn, uint64_t valid);
     uint64_t allocate_device_ppn();
     void free_device_vpn(uint64_t vpn);
-    void FSRF::sync_managed(uint64_t *addr);
+    void sync_managed(uint64_t *addr);
     uint64_t read_tlb_fault();
     uint64_t dram_tlb_addr(uint64_t vpn);
     void flush_tlb();

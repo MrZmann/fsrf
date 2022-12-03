@@ -38,7 +38,10 @@ public:
         }
         else
         {
-            read_ptr = fsrf->fsrf_malloc(read_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+            if(mode == FSRF::MODE::MMAP)
+                read_ptr = fsrf->fsrf_malloc(read_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+            else    
+                read_ptr = fsrf->fsrf_malloc_managed(read_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
             uint64_t length = 0;
             
             while (length != read_length) {
@@ -51,7 +54,10 @@ public:
                 std::cerr << "Problem reading\n";
                 exit(1);
             }
-            write_ptr = fsrf->fsrf_malloc(write_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+            if(mode == FSRF::MODE::MMAP)
+                write_ptr = fsrf->fsrf_malloc(write_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+            else
+                write_ptr = fsrf->fsrf_malloc_managed(write_length, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
         }
 
         assert(read_ptr != MAP_FAILED);

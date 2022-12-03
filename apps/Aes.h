@@ -23,6 +23,10 @@ public:
             src = fsrf->fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
             dest = fsrf->fsrf_malloc(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
             break;
+        case FSRF::MODE::MANAGED:
+            src = fsrf->fsrf_malloc_managed(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+            dest = fsrf->fsrf_malloc_managed(size, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE);
+            break;
         default:
             std::cerr << "unexpected mode\n";
             exit(1);

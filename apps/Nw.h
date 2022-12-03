@@ -50,6 +50,10 @@ public:
         {
             addr = fsrf->fsrf_malloc(length0, PROT_READ, flags);
         }
+        else if(mode == FSRF::MODE::MANAGED)
+        {
+            addr = fsrf->fsrf_malloc_managed(length0, PROT_READ, flags);
+        }
         else
         {
             addr = mmap(0, length0, PROT_READ, flags, -1, 0);
@@ -70,6 +74,10 @@ public:
         {
             addr = fsrf->fsrf_malloc(length1, PROT_READ, flags);
         }
+        else if(mode == FSRF::MODE::MANAGED)
+        {
+            addr = fsrf->fsrf_malloc_managed(length1, PROT_READ, flags);
+        }
         else
         {
             addr = mmap(0, length1, PROT_READ, flags, -1, 0);
@@ -88,6 +96,10 @@ public:
         if (mode == FSRF::MODE::MMAP)
         {
             addr = fsrf->fsrf_malloc(length1, PROT_WRITE, flags);
+        }
+        else if (mode == FSRF::MODE::MANAGED)
+        {
+            addr = fsrf->fsrf_malloc_managed(length1, PROT_WRITE, flags);
         }
         else
         {
@@ -147,7 +159,6 @@ public:
             output_sum += output[i];
         }
         if (verbose)
-            std::cout << "out sum: " << output_sum << "\n";
- 
+            std::cout << "out sum: " << output_sum << "\n"; 
     }
 };

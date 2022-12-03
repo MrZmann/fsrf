@@ -37,7 +37,7 @@ public:
 
     int getBatchSize()
     {
-        assert(mode == FSRF::MODE::MMAP || batch_size == 1);
+        assert(mode == FSRF::MODE::MMAP || mode == FSRF::MODE::MANAGED || batch_size == 1);
         assert(batch_size >= 1);
         assert(batch_size <= 512);
 
@@ -78,6 +78,10 @@ private:
                 else if (strcmp("mmap", optarg) == 0)
                 {
                     mode = FSRF::MODE::MMAP;
+                }
+                else if (strcmp("managed", optarg) == 0)
+                {
+                    mode = FSRF::MODE::MANAGED;
                 }
                 else
                 {
