@@ -14,7 +14,9 @@ using namespace std::chrono;
     }
 
 #ifdef DEBUG
-#define DBG(x) if (fsrf->debug) std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
+#define DBG(x)       \
+    if (fsrf->debug) \
+    std::cout << "[" << __FUNCTION__ << ":" << __LINE__ << "]\t" << x << std::endl
 #define ASSERT(b) assert(b)
 #else
 #define DBG(x) \
@@ -135,7 +137,7 @@ FSRF::~FSRF()
 
 const char *FSRF::mode_str(MODE mode)
 {
-    constexpr const char *mode_string[3] = {"inv_read", "inv_write", "mmap"};
+    constexpr const char *mode_string[4] = {"inv_read", "inv_write", "mmap", "managed"};
     return mode_string[mode];
 }
 
@@ -154,6 +156,49 @@ uint64_t FSRF::cntrlreg_read(uint64_t addr)
 uint64_t FSRF::get_num_credits()
 {
     return num_credits;
+}
+
+void *FSRF::fsrf_malloc_managed(uint64_t orig_length, uint64_t host_permissions, uint64_t device_permissions)
+{
+    const std::lock_guard<std::mutex> guard(lock);
+
+    ASSERT(mode == MANAGED);
+    uint64_t length = orig_length;
+    DBG("Length " << (void *)length);
+    if (length % mmap_dma_size != 0)
+    {
+        length += mmap_dma_size - (length % mmap_dma_size);
+        DBG("Rounding up length to " << (void *)length);
+    }
+
+    START("MMAP");
+    void *ptr = mmap(0, length + mmap_dma_size, host_permissions, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    END("MMAP");
+    if (ptr == MAP_FAILED)
+    {
+        ERR("mmap failed");
+    }
+
+    DBG("mmap returned pointer: " << ptr);
+    ASSERT(length % PAGE_SIZE == 0);
+    ASSERT(length % mmap_dma_size == 0);
+
+    uint64_t toReturn = (uint64_t)ptr;
+
+    if (toReturn % mmap_dma_size != 0)
+    {
+        toReturn = toReturn + (mmap_dma_size - (toReturn % mmap_dma_size));
+    }
+
+    DBG("Final mmap range: " << (void *)toReturn << " - " << (void *)(((uint64_t)ptr) + length + mmap_dma_size));
+    ASSERT(toReturn % mmap_dma_size == 0);
+    ASSERT(toReturn + orig_length <= ((uint64_t)ptr) + length + mmap_dma_size);
+    ASSERT(((uint64_t)toReturn + length) % mmap_dma_size == 0);
+    ASSERT(toReturn >= (uint64_t)ptr);
+
+    VME vme{toReturn, length, device_permissions, nullptr};
+    vmes[toReturn] = vme;
+    return (void *)toReturn;
 }
 
 void *FSRF::fsrf_malloc(uint64_t orig_length, uint64_t host_permissions, uint64_t device_permissions)
@@ -214,6 +259,67 @@ void FSRF::sync_device_to_host(uint64_t *addr, size_t length)
             (high > vme.addr && high < (vme.addr + vme.size)))
         {
             // unmap from addr to addr + size
+            for (uint64_t vaddr = vme.addr; vaddr < vme.addr + vme.size; vaddr += mmap_dma_size)
+            {
+                ASSERT(vaddr % mmap_dma_size == 0);
+                ASSERT(vme.size % mmap_dma_size == 0);
+
+                // this page was never put on the device
+                if (device_vpn_to_ppn.find(vaddr >> 12) == device_vpn_to_ppn.end())
+                    continue;
+
+                for (uint64_t curr = vaddr; curr < vaddr + mmap_dma_size; curr += 0x1000)
+                {
+                    uint64_t vpn = curr >> 12;
+                    ASSERT(device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end());
+                    write_tlb(vpn, device_vpn_to_ppn[vpn], false, false, false, false);
+                }
+                // timed_mprotect((void *)vaddr, mmap_dma_size, PROT_READ | PROT_WRITE);
+
+                DBG("Reading " << (uint64_t *)vaddr << " from fpga to host");
+
+                // dma from device to host
+                ASSERT(device_vpn_to_ppn.find(vaddr >> 12) != device_vpn_to_ppn.end());
+                fpga.dma_read((void *)vaddr, device_vpn_to_ppn[vaddr >> 12] << 12, mmap_dma_size);
+
+                DBG("Finished dma read");
+
+                for (uint64_t curr = vaddr; curr < vaddr + mmap_dma_size; curr += 0x1000)
+                {
+                    uint64_t vpn = curr >> 12;
+                    // this page was never put on the device
+                    if (device_vpn_to_ppn.find(vpn) == device_vpn_to_ppn.end())
+                        continue;
+                    // free up device page
+                    fsrf->free_device_vpn(vpn);
+                }
+            }
+            it = vmes.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+// brings back the dma batch size containing addr to the host
+void FSRF::sync_managed(uint64_t *addr)
+{
+
+    ASSERT(mode == MANAGED);
+    const std::lock_guard<std::mutex> guard(lock);
+    auto it = vmes.begin();
+    while (it != vmes.end())
+    {
+        VME vme = it->second;
+        // this is the right vme entry
+        if ((uint64_t)addr >= vme.addr && ((uint64_t)addr < (vme.addr + vme.size)))
+        {
+            // make available on the host
+            timed_mprotect(vme.addr, mmap_dma_size, PROT_READ | PROT_WRITE);
+
+            // unmap from addr to vaddr + mmap_dma_size on device
             for (uint64_t vaddr = vme.addr; vaddr < vme.addr + vme.size; vaddr += mmap_dma_size)
             {
                 ASSERT(vaddr % mmap_dma_size == 0);
@@ -462,9 +568,8 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
             }
         }
     }
-    else
+    else if (mode == MMAP)
     {
-
         // and make it writeable on the device
         if (device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end())
         {
@@ -474,7 +579,6 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
             return;
         }
 
-        ASSERT(mode == MODE::MMAP);
         uint64_t device_ppn = -1;
         VME vme;
 
@@ -522,6 +626,73 @@ void FSRF::handle_device_fault(bool read, uint64_t vpn)
                 }
 
                 fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
+                ASSERT(device_vpn_to_ppn.find(fault_vpn) != device_vpn_to_ppn.end());
+                respond_tlb(device_vpn_to_ppn[fault_vpn], true);
+                return;
+            }
+        }
+        ERR("Invalid device access");
+    }
+    else
+    {
+        ASSERT(mode == MANAGED);
+        // and make it writeable on the device
+        if (device_vpn_to_ppn.find(vpn) != device_vpn_to_ppn.end())
+        {
+            DBG("Data is already there!");
+            std::cout << "data already here\n";
+            respond_tlb(device_vpn_to_ppn[vpn], true);
+            return;
+        }
+
+        uint64_t device_ppn = -1;
+        VME vme;
+
+        uint64_t fault_vpn = vaddr >> 12;
+
+        // align vaddr / vpn to mmap_dma_size
+        vaddr -= vaddr % mmap_dma_size;
+        vpn = vaddr >> 12;
+
+        DBG("Aligned vaddr: " << (void *)vaddr);
+
+        for (auto it = vmes.begin(); it != vmes.end(); ++it)
+        {
+            vme = it->second;
+            // This is a valid mmapped address
+            if (vaddr >= vme.addr && vaddr < vme.addr + vme.size)
+            {
+                ASSERT(vme.addr % mmap_dma_size == 0);
+                ASSERT(vme.size % mmap_dma_size == 0);
+                DBG("Found suitable VME");
+                device_ppn = allocate_device_ppn();
+                device_vpn_to_ppn[vpn] = device_ppn;
+                for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
+                {
+                    // allocations guaranteed to be contiguous
+#ifdef DEBUG
+                    uint64_t next_ppn = allocate_device_ppn();
+                    ASSERT(next_ppn == device_ppn + page);
+#else
+                    allocate_device_ppn();
+#endif
+                    device_vpn_to_ppn[vpn + page] = device_ppn + page;
+                }
+
+                // fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
+
+                // write_tlb(vpn, device_ppn, /*writeable*/ true, true, true, false);
+                // respond_tlb(device_ppn, true);
+
+                // for (uint64_t page = 1; page < mmap_dma_size >> 12; ++page)
+                for (uint64_t page = 0; page < mmap_dma_size >> 12; ++page)
+                {
+                    ASSERT(device_vpn_to_ppn[vpn + page] == device_ppn + page);
+                    write_tlb(vpn + page, device_ppn + page, /*writeable*/ true, true, true, false);
+                }
+
+                fpga.dma_write((void *)vaddr, device_ppn << 12, mmap_dma_size);
+                timed_mprotect((void *)vaddr, mmap_dma_size, PROT_NONE);
                 ASSERT(device_vpn_to_ppn.find(fault_vpn) != device_vpn_to_ppn.end());
                 respond_tlb(device_vpn_to_ppn[fault_vpn], true);
                 return;
@@ -618,6 +789,9 @@ void FSRF::handle_host_fault(int sig, siginfo_t *info, void *ucontext)
             fsrf->fpga.dma_read((void *)vaddr, fsrf->device_vpn_to_ppn[vpn] << 12, (uint64_t)1 << 12);
 
             DBG("Finished dma read");
+        }
+        else if (fsrf->mode == MODE::MANAGED)
+        {
         }
         else
         {

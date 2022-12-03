@@ -22,7 +22,8 @@ public:
         NONE = -1,
         INV_READ = 0,
         INV_WRITE = 1,
-        MMAP = 2
+        MMAP = 2,
+        MANAGED = 3,
     };
 
     FSRF(uint64_t app_id, MODE mode, bool debug, int batch_size);
@@ -42,6 +43,7 @@ public:
     */
 
     void *fsrf_malloc(uint64_t length, uint64_t host_permissions, uint64_t device_permissions);
+    void *fsrf_malloc_managed(uint64_t length, uint64_t host_permissions, uint64_t device_permissions);
     void sync_device_to_host(uint64_t *addr, size_t length);
 
     void fsrf_free(uint64_t *addr);
@@ -92,9 +94,9 @@ private:
     respond_tlb(uint64_t ppn, uint64_t valid);
     uint64_t allocate_device_ppn();
     void free_device_vpn(uint64_t vpn);
+    void FSRF::sync_managed(uint64_t *addr);
     uint64_t read_tlb_fault();
     uint64_t dram_tlb_addr(uint64_t vpn);
-
     void flush_tlb();
     void write_tlb(uint64_t vpn,
                    uint64_t ppn,
